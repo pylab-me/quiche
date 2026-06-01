@@ -1,0 +1,166 @@
+name: Sync upstream and format scoped Rust dirs
+
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_ref:
+        description: "Upstream ref to sync from"
+        required: false
+        default: "master"
+      format_dirs:
+        description: "Space-separated dirs to format"
+        required: false
+        default: "quiche tokio-quiche"
+      config_branch:
+        description: "Branch that provides rustfmt.toml"
+        required: false
+        default: "branch-cargo-fmt"
+      push_branch_prefix:
+        description: "Generated branch prefix"
+        required: false
+        default: "sync-quiche-tokio-quiche"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-upstream-format
+  cancel-in-progress: false
+
+jobs:
+  sync-format-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Install Rust nightly rustfmt
+        run: |
+          rustup toolchain install nightly --profile minimal --component rustfmt
+          cargo +nightly fmt --version
+
+      - name: Fetch upstream and config branch
+        run: |
+          git remote add upstream https://github.com/cloudflare/quiche.git || true
+          git fetch upstream "${{ inputs.upstream_ref }}" --tags
+          git fetch origin "${{ inputs.config_branch }}"
+
+      - name: Create generated branch from upstream
+        id: branch
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ts="$(date -u +'%Y%m%d-%H%M%S')"
+          upstream_sha="$(git rev-parse --short "upstream/${{ inputs.upstream_ref }}")"
+          branch="${{ inputs.push_branch_prefix }}-${upstream_sha}-${ts}"
+
+          git checkout -B "$branch" "upstream/${{ inputs.upstream_ref }}"
+
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "upstream_sha=$upstream_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Apply rustfmt.toml from config branch
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git checkout "origin/${{ inputs.config_branch }}" -- rustfmt.toml
+
+          if [ ! -f rustfmt.toml ]; then
+            echo "rustfmt.toml not found from ${{ inputs.config_branch }}"
+            exit 1
+          fi
+
+      - name: Format selected directories
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for dir in ${{ inputs.format_dirs }}; do
+            if [ ! -d "$dir" ]; then
+              echo "skip missing dir: $dir"
+              continue
+            fi
+
+            if [ -f "$dir/Cargo.toml" ]; then
+              echo "format by cargo manifest: $dir/Cargo.toml"
+              cargo +nightly fmt --manifest-path "$dir/Cargo.toml"
+            else
+              echo "format by rustfmt scan: $dir"
+              find "$dir" -type f -name "*.rs" -print0 \
+                | xargs -0 -r rustfmt +nightly --config-path rustfmt.toml
+            fi
+          done
+
+      - name: Keep only selected directory changes
+        shell: python
+        run: |
+          from __future__ import annotations
+
+          import subprocess
+          from pathlib import Path
+
+          format_dirs = "${{ inputs.format_dirs }}".split()
+          keep_prefixes = tuple(f"{item.rstrip('/')}/" for item in format_dirs)
+          keep_files = {"rustfmt.toml"}
+
+          result = subprocess.run(
+              ["git", "status", "--porcelain"],
+              check=True,
+              text=True,
+              capture_output=True,
+          )
+
+          changed_paths = []
+          for line in result.stdout.splitlines():
+              if not line:
+                  continue
+
+              # Porcelain v1: XY PATH
+              path = line[3:].strip()
+              if " -> " in path:
+                  path = path.split(" -> ", 1)[1].strip()
+
+              changed_paths.append(path)
+
+          for path in changed_paths:
+              should_keep = path in keep_files or path.startswith(keep_prefixes)
+              if should_keep:
+                  continue
+
+              subprocess.run(["git", "checkout", "--", path], check=False)
+
+      - name: Commit and push generated branch
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          branch="${{ steps.branch.outputs.branch }}"
+          upstream_sha="${{ steps.branch.outputs.upstream_sha }}"
+
+          git status --short
+
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "No formatting changes detected."
+            exit 0
+          fi
+
+          git add rustfmt.toml ${{ inputs.format_dirs }}
+
+          git commit -m "chore(sync): format selected dirs from upstream ${upstream_sha}" \
+            -m "upstream: cloudflare/quiche@${upstream_sha}" \
+            -m "format_dirs: ${{ inputs.format_dirs }}" \
+            -m "config_branch: ${{ inputs.config_branch }}"
+
+          git push origin "HEAD:${branch}"
+
+          echo "pushed branch: ${branch}"
