@@ -25,16 +25,14 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::cmp;
-
 use std::collections::VecDeque;
 
-use crate::buffers::BufSplit;
-use crate::range_buf::RangeBuf;
 use crate::BufFactory;
 use crate::Error;
 use crate::Result;
-
+use crate::buffers::BufSplit;
 use crate::buffers::DefaultBufFactory;
+use crate::range_buf::RangeBuf;
 use crate::ranges;
 
 #[cfg(test)]
@@ -138,9 +136,7 @@ impl<F: BufFactory> SendBuf<F> {
     }
 
     /// Try to reserve the required number of bytes to be sent
-    fn reserve_for_write(
-        &mut self, mut len: usize, mut fin: bool,
-    ) -> Result<SendReserve<'_, F>> {
+    fn reserve_for_write(&mut self, mut len: usize, mut fin: bool) -> Result<SendReserve<'_, F>> {
         let max_off = self.off + len as u64;
 
         // Get the stream send capacity. This will return an error if the stream
@@ -211,7 +207,10 @@ impl<F: BufFactory> SendBuf<F> {
     /// (this may be lower than the size of the input buffer, in case of partial
     /// writes, in which case the unwritten buffer is also returned).
     pub fn append_buf(
-        &mut self, mut data: F::Buf, cap: usize, fin: bool,
+        &mut self,
+        mut data: F::Buf,
+        cap: usize,
+        fin: bool,
     ) -> Result<(usize, Option<F::Buf>)>
     where
         F::Buf: BufSplit,
@@ -223,8 +222,7 @@ impl<F: BufFactory> SendBuf<F> {
             return Ok((0, Some(data)));
         }
 
-        let remainder =
-            (reserve.reserved < len).then(|| data.split_at(reserve.reserved));
+        let remainder = (reserve.reserved < len).then(|| data.split_at(reserve.reserved));
 
         let ret = reserve.reserved;
 
@@ -243,10 +241,10 @@ impl<F: BufFactory> SendBuf<F> {
         while out_len > 0 {
             let off_front = self.off_front();
 
-            if self.is_empty() ||
-                off_front >= self.off ||
-                off_front != next_off ||
-                off_front >= self.max_data
+            if self.is_empty()
+                || off_front >= self.off
+                || off_front != next_off
+                || off_front >= self.max_data
             {
                 break;
             }

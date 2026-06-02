@@ -24,8 +24,9 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use quiche::h3;
 use std::future::Future;
+
+use quiche::h3;
 
 use super::H3Command;
 use super::H3ConnectionResult;
@@ -64,14 +65,16 @@ pub trait DriverHooks: Sized + Send + 'static {
     /// has been initialized. Used to verify connection settings and set up
     /// post-accept state like timeouts.
     fn conn_established(
-        driver: &mut H3Driver<Self>, qconn: &mut QuicheConnection,
+        driver: &mut H3Driver<Self>,
+        qconn: &mut QuicheConnection,
         handshake_info: &HandshakeInfo,
     ) -> H3ConnectionResult<()>;
 
     /// Processes any received [`h3::Event::Headers`]. There is no default
     /// processing of HEADERS frames in [H3Driver].
     fn headers_received(
-        driver: &mut H3Driver<Self>, qconn: &mut QuicheConnection,
+        driver: &mut H3Driver<Self>,
+        qconn: &mut QuicheConnection,
         headers: InboundHeaders,
     ) -> H3ConnectionResult<()>;
 
@@ -79,7 +82,8 @@ pub trait DriverHooks: Sized + Send + 'static {
     /// [`H3Controller`](super::H3Controller). May use
     /// `H3Driver::handle_core_command` to handle regular [`H3Command`]s.
     fn conn_command(
-        driver: &mut H3Driver<Self>, qconn: &mut QuicheConnection,
+        driver: &mut H3Driver<Self>,
+        qconn: &mut QuicheConnection,
         cmd: Self::Command,
     ) -> H3ConnectionResult<()>;
 
@@ -101,7 +105,8 @@ pub trait DriverHooks: Sized + Send + 'static {
     /// sources for the [H3Driver]. Note that the future will be dropped
     /// before it resolves if another input is available first.
     fn wait_for_action(
-        &mut self, qconn: &mut QuicheConnection,
+        &mut self,
+        qconn: &mut QuicheConnection,
     ) -> impl Future<Output = H3ConnectionResult<()>> + Send {
         std::future::pending()
     }

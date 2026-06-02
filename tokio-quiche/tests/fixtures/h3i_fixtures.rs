@@ -24,20 +24,18 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use h3i::actions::h3::send_headers_frame;
 use h3i::actions::h3::Action;
 use h3i::actions::h3::StreamEvent;
 use h3i::actions::h3::StreamEventType;
 use h3i::actions::h3::WaitType;
-use h3i::client::connection_summary::ConnectionSummary;
+use h3i::actions::h3::send_headers_frame;
 use h3i::client::ClientError;
+use h3i::client::connection_summary::ConnectionSummary;
 use h3i::frame::H3iFrame;
-use h3i::quiche::h3::Header;
-use h3i::quiche::h3::{
-    self,
-};
 use h3i::quiche::ConnectionError;
 use h3i::quiche::WireErrorCode;
+use h3i::quiche::h3::Header;
+use h3i::quiche::h3::{self};
 use url::Url;
 
 /// Default h3i config, connects to "test.com"
@@ -89,7 +87,8 @@ pub fn url_headers(url: &Url) -> Vec<Header> {
 }
 
 pub async fn summarize_connection(
-    h3i: h3i::config::Config, actions: Vec<Action>,
+    h3i: h3i::config::Config,
+    actions: Vec<Action>,
 ) -> ConnectionSummary {
     tokio::task::spawn_blocking(move || {
         h3i::client::sync_client::connect(h3i, actions, None).unwrap()
@@ -98,9 +97,7 @@ pub async fn summarize_connection(
     .unwrap()
 }
 
-pub async fn request(
-    url: &str, count: u64,
-) -> Result<ConnectionSummary, ClientError> {
+pub async fn request(url: &str, count: u64) -> Result<ConnectionSummary, ClientError> {
     let h3i = h3i_config(url);
     let url = Url::parse(url).expect("h3i request URL is invalid");
     let headers = url_headers(&url);
@@ -126,29 +123,20 @@ pub async fn request(
         },
     });
 
-    tokio::task::spawn_blocking(move || {
-        h3i::client::sync_client::connect(h3i, actions, None)
-    })
-    .await
-    .unwrap()
+    tokio::task::spawn_blocking(move || h3i::client::sync_client::connect(h3i, actions, None))
+        .await
+        .unwrap()
 }
 
-pub fn received_status_code_on_stream(
-    summary: &ConnectionSummary, stream: u64, code: u16,
-) -> bool {
-    summary
-        .stream_map
-        .headers_on_stream(stream)
-        .iter()
-        .any(|e| {
-            let u16 =
-                std::str::from_utf8(e.status_code().expect("no status code"))
-                    .expect("invalid utf8 in status code")
-                    .parse::<u16>()
-                    .expect("unparseable status code");
+pub fn received_status_code_on_stream(summary: &ConnectionSummary, stream: u64, code: u16) -> bool {
+    summary.stream_map.headers_on_stream(stream).iter().any(|e| {
+        let u16 = std::str::from_utf8(e.status_code().expect("no status code"))
+            .expect("invalid utf8 in status code")
+            .parse::<u16>()
+            .expect("unparseable status code");
 
-            u16 == code
-        })
+        u16 == code
+    })
 }
 
 pub fn stream_body(summary: &ConnectionSummary, stream: u64) -> Option<String> {
@@ -160,9 +148,7 @@ pub fn stream_body(summary: &ConnectionSummary, stream: u64) -> Option<String> {
         .filter_map(|f| {
             if let H3iFrame::QuicheH3(h3::frame::Frame::Data { payload }) = f {
                 has_body = true;
-                return Some(
-                    String::from_utf8(payload).expect("response body not UTF-8"),
-                );
+                return Some(String::from_utf8(payload).expect("response body not UTF-8"));
             }
             None
         })

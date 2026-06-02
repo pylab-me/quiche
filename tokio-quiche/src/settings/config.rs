@@ -24,11 +24,11 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use foundations::telemetry::log;
 use std::borrow::Cow;
 use std::fs::File;
 use std::time::Duration;
 
+use foundations::telemetry::log;
 use qlog::writer::QlogCompression;
 
 use crate::result::QuicResult;
@@ -39,8 +39,7 @@ use crate::socket::SocketCapabilities;
 
 /// Whether `--cfg capture_keylogs` was set at build time. We keep supporting
 /// the `capture_keylogs` feature for backward compatibility.
-const KEYLOGFILE_ENABLED: bool =
-    cfg!(capture_keylogs) || cfg!(feature = "capture_keylogs");
+const KEYLOGFILE_ENABLED: bool = cfg!(capture_keylogs) || cfg!(feature = "capture_keylogs");
 
 /// Internal representation of the combined configuration for a QUIC connection.
 pub(crate) struct Config {
@@ -66,7 +65,8 @@ impl AsMut<quiche::Config> for Config {
 
 impl Config {
     pub(crate) fn new(
-        params: &ConnectionParams, socket_capabilities: SocketCapabilities,
+        params: &ConnectionParams,
+        socket_capabilities: SocketCapabilities,
     ) -> QuicResult<Self> {
         let quic_settings = &params.settings;
         let keylog_path = match &quic_settings.keylog_file {
@@ -95,8 +95,7 @@ impl Config {
 
         Ok(Config {
             quiche_config: make_quiche_config(params, keylog_file.is_some())?,
-            disable_client_ip_validation: quic_settings
-                .disable_client_ip_validation,
+            disable_client_ip_validation: quic_settings.disable_client_ip_validation,
             qlog_dir: quic_settings.qlog_dir.clone(),
             qlog_compression: quic_settings.qlog_compression,
             has_gso,
@@ -113,7 +112,8 @@ impl Config {
 }
 
 fn make_quiche_config(
-    params: &ConnectionParams, should_log_keys: bool,
+    params: &ConnectionParams,
+    should_log_keys: bool,
 ) -> QuicResult<quiche::Config> {
     let ssl_ctx_builder = params
         .hooks
@@ -123,18 +123,14 @@ fn make_quiche_config(
         .and_then(|(hook, tls)| hook.create_custom_ssl_context_builder(tls));
 
     let mut config = if let Some(builder) = ssl_ctx_builder {
-        quiche::Config::with_boring_ssl_ctx_builder(
-            quiche::PROTOCOL_VERSION,
-            builder,
-        )?
+        quiche::Config::with_boring_ssl_ctx_builder(quiche::PROTOCOL_VERSION, builder)?
     } else {
         quiche_config_with_tls(params.tls_cert)?
     };
 
     let quic_settings = &params.settings;
 
-    let alpns: Vec<&[u8]> =
-        quic_settings.alpn.iter().map(Vec::as_slice).collect();
+    let alpns: Vec<&[u8]> = quic_settings.alpn.iter().map(Vec::as_slice).collect();
     config.set_application_protos(&alpns).unwrap();
 
     if let Some(timeout) = quic_settings.max_idle_timeout {
@@ -154,27 +150,17 @@ fn make_quiche_config(
     config.set_max_recv_udp_payload_size(quic_settings.max_recv_udp_payload_size);
     config.set_max_send_udp_payload_size(quic_settings.max_send_udp_payload_size);
     config.set_initial_max_data(quic_settings.initial_max_data);
-    config.set_initial_max_stream_data_bidi_local(
-        quic_settings.initial_max_stream_data_bidi_local,
-    );
-    config.set_initial_max_stream_data_bidi_remote(
-        quic_settings.initial_max_stream_data_bidi_remote,
-    );
-    config.set_initial_max_stream_data_uni(
-        quic_settings.initial_max_stream_data_uni,
-    );
+    config.set_initial_max_stream_data_bidi_local(quic_settings.initial_max_stream_data_bidi_local);
+    config
+        .set_initial_max_stream_data_bidi_remote(quic_settings.initial_max_stream_data_bidi_remote);
+    config.set_initial_max_stream_data_uni(quic_settings.initial_max_stream_data_uni);
     config.set_initial_max_streams_bidi(quic_settings.initial_max_streams_bidi);
     config.set_initial_max_streams_uni(quic_settings.initial_max_streams_uni);
     config.set_disable_active_migration(quic_settings.disable_active_migration);
-    config
-        .set_active_connection_id_limit(quic_settings.active_connection_id_limit);
+    config.set_active_connection_id_limit(quic_settings.active_connection_id_limit);
     config.set_cc_algorithm_name(quic_settings.cc_algorithm.as_str())?;
-    config.set_initial_congestion_window_packets(
-        quic_settings.initial_congestion_window_packets,
-    );
-    config.set_enable_relaxed_loss_threshold(
-        quic_settings.enable_relaxed_loss_threshold,
-    );
+    config.set_initial_congestion_window_packets(quic_settings.initial_congestion_window_packets);
+    config.set_enable_relaxed_loss_threshold(quic_settings.enable_relaxed_loss_threshold);
     config.discover_pmtu(quic_settings.discover_path_mtu);
     config.set_pmtud_max_probes(quic_settings.pmtud_max_probes);
     config.enable_hystart(quic_settings.enable_hystart);
@@ -193,26 +179,18 @@ fn make_quiche_config(
     config.set_use_initial_max_data_as_flow_control_win(
         quic_settings.use_initial_max_data_as_fc_window,
     );
-    config.set_enable_send_streams_blocked(
-        quic_settings.enable_send_streams_blocked,
-    );
+    config.set_enable_send_streams_blocked(quic_settings.enable_send_streams_blocked);
     config.grease(quic_settings.grease);
     config.set_max_amplification_factor(quic_settings.max_amplification_factor);
     config.set_send_capacity_factor(quic_settings.send_capacity_factor);
     config.set_ack_delay_exponent(quic_settings.ack_delay_exponent);
     config.set_max_ack_delay(quic_settings.max_ack_delay);
-    config.set_path_challenge_recv_max_queue_len(
-        quic_settings.max_path_challenge_recv_queue_len,
-    );
+    config.set_path_challenge_recv_max_queue_len(quic_settings.max_path_challenge_recv_queue_len);
     config.set_stateless_reset_token(quic_settings.stateless_reset_token);
     config.set_disable_dcid_reuse(quic_settings.disable_dcid_reuse);
 
-    if let Some(track_unknown_transport_params) =
-        quic_settings.track_unknown_transport_parameters
-    {
-        config.enable_track_unknown_transport_parameters(
-            track_unknown_transport_params,
-        );
+    if let Some(track_unknown_transport_params) = quic_settings.track_unknown_transport_parameters {
+        config.enable_track_unknown_transport_parameters(track_unknown_transport_params);
     }
     if params.settings.enable_early_data {
         config.enable_early_data();
@@ -225,9 +203,7 @@ fn make_quiche_config(
     Ok(config)
 }
 
-fn quiche_config_with_tls(
-    tls_cert: Option<TlsCertificatePaths>,
-) -> QuicResult<quiche::Config> {
+fn quiche_config_with_tls(tls_cert: Option<TlsCertificatePaths>) -> QuicResult<quiche::Config> {
     let Some(tls) = tls_cert else {
         return Ok(quiche::Config::new(quiche::PROTOCOL_VERSION).unwrap());
     };
@@ -237,7 +213,7 @@ fn quiche_config_with_tls(
         CertificateKind::RawPublicKey => {
             // TODO: don't compile this enum variant unless rpk feature is enabled
             panic!("Can't use RPK when compiled without rpk feature");
-        },
+        }
         #[cfg(feature = "rpk")]
         CertificateKind::RawPublicKey => {
             let mut ssl_ctx_builder = boring::ssl::SslContextBuilder::new_rpk()?;
@@ -245,29 +221,25 @@ fn quiche_config_with_tls(
             ssl_ctx_builder.set_rpk_certificate(&raw_public_key)?;
 
             let raw_private_key = read_file(tls.private_key)?;
-            let pkey =
-                boring::pkey::PKey::private_key_from_pem(&raw_private_key)?;
+            let pkey = boring::pkey::PKey::private_key_from_pem(&raw_private_key)?;
             ssl_ctx_builder.set_null_chain_private_key(&pkey)?;
 
             Ok(quiche::Config::with_boring_ssl_ctx_builder(
                 quiche::PROTOCOL_VERSION,
                 ssl_ctx_builder,
             )?)
-        },
+        }
         CertificateKind::X509 => {
-            let mut config =
-                quiche::Config::new(quiche::PROTOCOL_VERSION).unwrap();
+            let mut config = quiche::Config::new(quiche::PROTOCOL_VERSION).unwrap();
             config.load_cert_chain_from_pem_file(tls.cert)?;
             config.load_priv_key_from_pem_file(tls.private_key)?;
             Ok(config)
-        },
+        }
     }
 }
 
 #[cfg(feature = "rpk")]
 fn read_file(path: &str) -> QuicResult<Vec<u8>> {
     use anyhow::Context as _;
-    std::fs::read(path)
-        .with_context(|| format!("read {path}"))
-        .map_err(Into::into)
+    std::fs::read(path).with_context(|| format!("read {path}")).map_err(Into::into)
 }

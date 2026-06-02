@@ -26,19 +26,19 @@
 
 use std::time::Duration;
 
-use crate::fixtures::*;
+use h3i::actions::h3::Action;
+use h3i::actions::h3::StreamEvent;
+use h3i::actions::h3::StreamEventType;
+use h3i::actions::h3::WaitType;
+use h3i::actions::h3::send_headers_frame;
+use h3i::quiche;
+use h3i::quiche::h3::Header;
 use h3i_fixtures::default_headers;
 use h3i_fixtures::h3i_config;
 use h3i_fixtures::received_status_code_on_stream;
 use h3i_fixtures::summarize_connection;
 
-use h3i::actions::h3::send_headers_frame;
-use h3i::actions::h3::Action;
-use h3i::actions::h3::StreamEvent;
-use h3i::actions::h3::StreamEventType;
-use h3i::actions::h3::WaitType;
-use h3i::quiche;
-use h3i::quiche::h3::Header;
+use crate::fixtures::*;
 
 #[tokio::test]
 async fn test_requests_per_connection_limit() -> QuicResult<()> {
@@ -84,10 +84,7 @@ async fn test_requests_per_connection_limit() -> QuicResult<()> {
     }
     assert!(summary.stream_map.stream(MAX_REQS * 4).is_empty());
 
-    let error = summary
-        .conn_close_details
-        .peer_error()
-        .expect("no error received");
+    let error = summary.conn_close_details.peer_error().expect("no error received");
     assert_eq!(error.error_code, quiche::h3::WireErrorCode::NoError as u64);
 
     Ok(())
@@ -130,20 +127,14 @@ async fn test_max_header_list_size_limit() -> QuicResult<()> {
     assert!(received_status_code_on_stream(&summary, 0, 200));
     assert!(summary.stream_map.stream(4).is_empty());
 
-    let error = summary
-        .conn_close_details
-        .peer_error()
-        .expect("no error received");
+    let error = summary.conn_close_details.peer_error().expect("no error received");
     assert_eq!(
         error.error_code,
         quiche::h3::WireErrorCode::ExcessiveLoad as u64
     );
 
     // Verify the QuicAuditStats has the correct error code set
-    let audit_stats = audit_stats_rx
-        .recv()
-        .await
-        .expect("audit stats not received");
+    let audit_stats = audit_stats_rx.recv().await.expect("audit stats not received");
 
     // The server sent the EXCESSIVE_LOAD error, so it should be recorded as a
     // sent application error code

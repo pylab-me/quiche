@@ -24,8 +24,29 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::collections::HashMap;
+use std::collections::HashSet;
+use std::net::SocketAddr;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
+
 use bytes::Bytes;
 use datagram_socket::QuicAuditStats;
+use futures::Future;
+use futures::SinkExt;
+use futures::StreamExt;
+use futures::stream::FuturesUnordered;
+use regex::Regex;
+use tokio::select;
+use tokio::sync::mpsc;
+use tokio_quiche::ConnectionParams;
+pub use tokio_quiche::QuicResult;
+pub use tokio_quiche::QuicResultExt;
+pub use tokio_quiche::ServerH3Connection;
+use tokio_quiche::ServerH3Controller;
+pub use tokio_quiche::ServerH3Driver;
 use tokio_quiche::http3::driver::H3Event;
 use tokio_quiche::http3::driver::InboundFrame;
 use tokio_quiche::http3::driver::InboundFrameStream;
@@ -33,42 +54,18 @@ use tokio_quiche::http3::driver::IncomingH3Headers;
 use tokio_quiche::http3::driver::OutboundFrame;
 use tokio_quiche::http3::driver::OutboundFrameSender;
 use tokio_quiche::http3::driver::ServerH3Event;
+// Re-export for convenience
+pub use tokio_quiche::http3::settings::Http3Settings;
 use tokio_quiche::listen;
 use tokio_quiche::metrics::DefaultMetrics;
 use tokio_quiche::quic::ConnectionHook;
+pub use tokio_quiche::quic::ConnectionShutdownBehaviour;
 use tokio_quiche::quiche::h3::Header;
 use tokio_quiche::quiche::h3::NameValue;
-use tokio_quiche::quiche::h3::{
-    self,
-};
+use tokio_quiche::quiche::h3::{self};
 use tokio_quiche::settings::Hooks;
-use tokio_quiche::settings::TlsCertificatePaths;
-use tokio_quiche::ConnectionParams;
-use tokio_quiche::ServerH3Controller;
-
-use futures::stream::FuturesUnordered;
-use futures::Future;
-use futures::SinkExt;
-use futures::StreamExt;
-use regex::Regex;
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::net::SocketAddr;
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::AtomicUsize;
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
-use tokio::select;
-use tokio::sync::mpsc;
-
-// Re-export for convenience
-pub use tokio_quiche::http3::settings::Http3Settings;
-pub use tokio_quiche::quic::ConnectionShutdownBehaviour;
 pub use tokio_quiche::settings::QuicSettings;
-pub use tokio_quiche::QuicResult;
-pub use tokio_quiche::QuicResultExt;
-pub use tokio_quiche::ServerH3Connection;
-pub use tokio_quiche::ServerH3Driver;
+use tokio_quiche::settings::TlsCertificatePaths;
 
 pub mod h3i_fixtures;
 
@@ -103,24 +100,20 @@ impl TestConnectionHook {
 
 impl ConnectionHook for TestConnectionHook {
     fn create_custom_ssl_context_builder(
-        &self, _settings: TlsCertificatePaths<'_>,
+        &self,
+        _settings: TlsCertificatePaths<'_>,
     ) -> Option<boring::ssl::SslContextBuilder> {
         self.was_called.store(true, Ordering::SeqCst);
         None
     }
 }
 
-pub async fn request(
-    url: String, count: u64,
-) -> QuicResult<HashMap<u64, String>> {
-    let summary = h3i_fixtures::request(&url, count)
-        .await
-        .expect("requests failed");
+pub async fn request(url: String, count: u64) -> QuicResult<HashMap<u64, String>> {
+    let summary = h3i_fixtures::request(&url, count).await.expect("requests failed");
     let map = (0..count)
         .map(|req| {
             let stream_id = req * 4;
-            let body =
-                stream_body(&summary, stream_id).expect("missing response body");
+            let body = stream_body(&summary, stream_id).expect("missing response body");
             (stream_id, body)
         })
         .collect();
@@ -128,7 +121,8 @@ pub async fn request(
 }
 
 pub async fn serve_connection_details(
-    h3_controller: &mut ServerH3Controller, request_counter: Arc<AtomicUsize>,
+    h3_controller: &mut ServerH3Controller,
+    request_counter: Arc<AtomicUsize>,
 ) -> QuicResult<()> {
     let event_rx = h3_controller.event_receiver_mut();
     let mut request_futs = FuturesUnordered::new();
@@ -163,15 +157,13 @@ pub async fn serve_connection_details(
 }
 
 pub async fn handle_connection(mut connection: ServerH3Connection) {
-    let _ = serve_connection_details(
-        &mut connection.h3_controller,
-        Default::default(),
-    )
-    .await;
+    let _ = serve_connection_details(&mut connection.h3_controller, Default::default()).await;
 }
 
 pub async fn handle_forwarded_headers_frame(
-    stream_id: u64, list: Vec<Header>, mut send: OutboundFrameSender,
+    stream_id: u64,
+    list: Vec<Header>,
+    mut send: OutboundFrameSender,
     mut recv: InboundFrameStream,
 ) {
     send.send(OutboundFrame::Headers(
@@ -188,12 +180,9 @@ pub async fn handle_forwarded_headers_frame(
 
     while let Some(frame) = recv.recv().await {
         match frame {
-            InboundFrame::Body(_, fin) =>
+            InboundFrame::Body(_, fin) => {
                 if fin {
-                    let res = format!(
-                        "{stream_id},GET {}|",
-                        String::from_utf8(path).unwrap()
-                    );
+                    let res = format!("{stream_id},GET {}|", String::from_utf8(path).unwrap());
                     send.send(OutboundFrame::Body(
                         Bytes::copy_from_slice(res.as_bytes()),
                         true,
@@ -201,7 +190,8 @@ pub async fn handle_forwarded_headers_frame(
                     .await
                     .unwrap();
                     return;
-                },
+                }
+            }
             InboundFrame::Datagram(_) => unreachable!(),
         }
     }
@@ -228,8 +218,10 @@ pub fn start_server() -> (
 }
 
 pub fn start_server_with_settings<F, Fut>(
-    quic_settings: QuicSettings, http3_settings: Http3Settings,
-    hook: Arc<impl ConnectionHook + Send + Sync + 'static>, hdl: F,
+    quic_settings: QuicSettings,
+    http3_settings: Http3Settings,
+    hook: Arc<impl ConnectionHook + Send + Sync + 'static>,
+    hdl: F,
 ) -> (String, mpsc::UnboundedReceiver<Arc<QuicAuditStats>>)
 where
     F: Fn(ServerH3Connection) -> Fut + Send + Clone + 'static,
@@ -248,18 +240,14 @@ where
         connection_hook: Some(hook),
     };
 
-    let params =
-        ConnectionParams::new_server(quic_settings, tls_cert_settings, hooks);
-    let mut stream = listen(vec![socket], params, DefaultMetrics)
-        .unwrap()
-        .remove(0);
+    let params = ConnectionParams::new_server(quic_settings, tls_cert_settings, hooks);
+    let mut stream = listen(vec![socket], params, DefaultMetrics).unwrap().remove(0);
 
     let (audit_stats_tx, audit_stats_rx) = mpsc::unbounded_channel();
 
     tokio::spawn(async move {
         loop {
-            let (h3_driver, h3_controller) =
-                ServerH3Driver::new(http3_settings.clone());
+            let (h3_driver, h3_controller) = ServerH3Driver::new(http3_settings.clone());
             let conn = stream.next().await.unwrap().unwrap().start(h3_driver);
             let h3_over_quic = ServerH3Connection::new(conn, h3_controller);
 
@@ -279,18 +267,14 @@ where
 pub fn extract_host_ipv4(url: &str) -> SocketAddr {
     let url = url::Url::parse(url).expect("url should be valid");
     match (url.host(), url.port()) {
-        (Some(url::Host::Ipv4(addr)), Some(port)) =>
-            SocketAddr::new(addr.into(), port),
+        (Some(url::Host::Ipv4(addr)), Some(port)) => SocketAddr::new(addr.into(), port),
         _ => panic!("invalid server address"),
     }
 }
 
-pub fn map_responses(
-    responses: Vec<HashMap<u64, String>>,
-) -> HashMap<usize, HashSet<usize>> {
+pub fn map_responses(responses: Vec<HashMap<u64, String>>) -> HashMap<usize, HashSet<usize>> {
     let mut map = HashMap::<_, HashSet<_>>::default();
-    let res_info_re =
-        Regex::new(r"^(?P<stream_id>\d+),GET /(?P<conn_num>\d+)$").unwrap();
+    let res_info_re = Regex::new(r"^(?P<stream_id>\d+),GET /(?P<conn_num>\d+)$").unwrap();
 
     for resp in responses {
         for (_, content) in resp {
@@ -300,10 +284,8 @@ pub fn map_responses(
                 }
 
                 let caps = res_info_re.captures(res).unwrap();
-                let conn_num =
-                    caps.name("conn_num").unwrap().as_str().parse().unwrap();
-                let stream_id =
-                    caps.name("stream_id").unwrap().as_str().parse().unwrap();
+                let conn_num = caps.name("conn_num").unwrap().as_str().parse().unwrap();
+                let stream_id = caps.name("stream_id").unwrap().as_str().parse().unwrap();
 
                 map.entry(conn_num).or_default().insert(stream_id);
             }

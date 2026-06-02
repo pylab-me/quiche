@@ -32,7 +32,6 @@ mod quic;
 mod tls;
 
 pub(crate) use self::config::*;
-
 pub use self::hooks::*;
 pub use self::quic::*;
 pub use self::tls::*;
@@ -88,7 +87,9 @@ impl<'a> ConnectionParams<'a> {
     /// Servers should always specify TLS credentials.
     #[inline]
     pub fn new_server(
-        settings: QuicSettings, tls_cert: TlsCertificatePaths<'a>, hooks: Hooks,
+        settings: QuicSettings,
+        tls_cert: TlsCertificatePaths<'a>,
+        hooks: Hooks,
     ) -> Self {
         Self {
             settings,
@@ -104,7 +105,8 @@ impl<'a> ConnectionParams<'a> {
     /// Clients may enable mTLS by specifying TLS credentials.
     #[inline]
     pub fn new_client(
-        settings: QuicSettings, tls_cert: Option<TlsCertificatePaths<'a>>,
+        settings: QuicSettings,
+        tls_cert: Option<TlsCertificatePaths<'a>>,
         hooks: Hooks,
     ) -> Self {
         Self {

@@ -30,13 +30,13 @@ use std::time::Instant;
 
 use tokio::sync::mpsc;
 
+use crate::QuicResult;
+use crate::quic::QuicheConnection;
 use crate::quic::connection::ApplicationOverQuic;
 use crate::quic::connection::HandshakeError;
 use crate::quic::connection::HandshakeInfo;
 use crate::quic::connection::Incoming;
 use crate::quic::connection::QuicConnectionStatsShared;
-use crate::quic::QuicheConnection;
-use crate::QuicResult;
 
 /// Represents the current lifecycle stage of a [quiche::Connection].
 /// Implementors of this trait inform the underlying I/O loop as to how to
@@ -52,14 +52,17 @@ use crate::QuicResult;
 /// ownership over the connection in order to read, gather, and flush from it.
 pub trait ConnectionStage: Send + Debug {
     fn on_read<A: ApplicationOverQuic>(
-        &mut self, _received_packets: bool, _qconn: &mut QuicheConnection,
+        &mut self,
+        _received_packets: bool,
+        _qconn: &mut QuicheConnection,
         _ctx: &mut ConnectionStageContext<A>,
     ) -> QuicResult<()> {
         Ok(())
     }
 
     fn on_flush<A: ApplicationOverQuic>(
-        &mut self, _qconn: &mut QuicheConnection,
+        &mut self,
+        _qconn: &mut QuicheConnection,
         _ctx: &mut ConnectionStageContext<A>,
     ) -> ControlFlow<QuicResult<()>> {
         ControlFlow::Continue(())
@@ -69,9 +72,7 @@ pub trait ConnectionStage: Send + Debug {
         None
     }
 
-    fn post_wait(
-        &self, _qconn: &mut QuicheConnection,
-    ) -> ControlFlow<QuicResult<()>> {
+    fn post_wait(&self, _qconn: &mut QuicheConnection) -> ControlFlow<QuicResult<()>> {
         ControlFlow::Continue(())
     }
 }
@@ -101,15 +102,9 @@ pub struct Handshake {
 }
 
 impl Handshake {
-    fn check_handshake_timeout_expired(
-        &self, conn: &mut QuicheConnection,
-    ) -> QuicResult<()> {
+    fn check_handshake_timeout_expired(&self, conn: &mut QuicheConnection) -> QuicResult<()> {
         if self.handshake_info.is_expired() {
-            let _ = conn.close(
-                false,
-                quiche::WireErrorCode::ApplicationError as u64,
-                &[],
-            );
+            let _ = conn.close(false, quiche::WireErrorCode::ApplicationError as u64, &[]);
             return Err(HandshakeError::Timeout.into());
         }
 
@@ -119,7 +114,8 @@ impl Handshake {
 
 impl ConnectionStage for Handshake {
     fn on_flush<A: ApplicationOverQuic>(
-        &mut self, qconn: &mut QuicheConnection,
+        &mut self,
+        qconn: &mut QuicheConnection,
         _ctx: &mut ConnectionStageContext<A>,
     ) -> ControlFlow<QuicResult<()>> {
         // Transition to RunningApplication if we have 1-RTT keys (handshake is
@@ -135,9 +131,7 @@ impl ConnectionStage for Handshake {
         self.handshake_info.deadline()
     }
 
-    fn post_wait(
-        &self, qconn: &mut QuicheConnection,
-    ) -> ControlFlow<QuicResult<()>> {
+    fn post_wait(&self, qconn: &mut QuicheConnection) -> ControlFlow<QuicResult<()>> {
         match self.check_handshake_timeout_expired(qconn) {
             Ok(_) => ControlFlow::Continue(()),
             Err(e) => ControlFlow::Break(Err(e)),
@@ -150,7 +144,9 @@ pub struct RunningApplication;
 
 impl ConnectionStage for RunningApplication {
     fn on_read<A: ApplicationOverQuic>(
-        &mut self, received_packets: bool, qconn: &mut QuicheConnection,
+        &mut self,
+        received_packets: bool,
+        qconn: &mut QuicheConnection,
         ctx: &mut ConnectionStageContext<A>,
     ) -> QuicResult<()> {
         if ctx.application.should_act() {

@@ -28,7 +28,6 @@
 extern crate log;
 
 use quiche::h3::NameValue;
-
 use ring::rand::*;
 
 const MAX_DATAGRAM_SIZE: usize = 1350;
@@ -66,8 +65,7 @@ fn main() {
 
     // Create the UDP socket backing the QUIC connection, and register it with
     // the event loop.
-    let mut socket =
-        mio::net::UdpSocket::bind(bind_addr.parse().unwrap()).unwrap();
+    let mut socket = mio::net::UdpSocket::bind(bind_addr.parse().unwrap()).unwrap();
     poll.registry()
         .register(&mut socket, mio::Token(0), mio::Interest::READABLE)
         .unwrap();
@@ -78,9 +76,7 @@ fn main() {
     // *CAUTION*: this should not be set to `false` in production!!!
     config.verify_peer(false);
 
-    config
-        .set_application_protos(quiche::h3::APPLICATION_PROTOCOL)
-        .unwrap();
+    config.set_application_protos(quiche::h3::APPLICATION_PROTOCOL).unwrap();
 
     config.set_max_idle_timeout(5000);
     config.set_max_recv_udp_payload_size(MAX_DATAGRAM_SIZE);
@@ -106,8 +102,7 @@ fn main() {
 
     // Create a QUIC connection and initiate handshake.
     let mut conn =
-        quiche::connect(url.domain(), &scid, local_addr, peer_addr, &mut config)
-            .unwrap();
+        quiche::connect(url.domain(), &scid, local_addr, peer_addr, &mut config).unwrap();
 
     info!(
         "connecting to {:} from {:} with scid {}",
@@ -142,10 +137,7 @@ fn main() {
     let req = vec![
         quiche::h3::Header::new(b":method", b"GET"),
         quiche::h3::Header::new(b":scheme", url.scheme().as_bytes()),
-        quiche::h3::Header::new(
-            b":authority",
-            url.host_str().unwrap().as_bytes(),
-        ),
+        quiche::h3::Header::new(b":authority", url.host_str().unwrap().as_bytes()),
         quiche::h3::Header::new(b":path", path.as_bytes()),
         quiche::h3::Header::new(b"user-agent", b"quiche"),
     ];
@@ -183,7 +175,7 @@ fn main() {
                     }
 
                     panic!("recv() failed: {e:?}");
-                },
+                }
             };
 
             debug!("got {len} bytes");
@@ -200,7 +192,7 @@ fn main() {
                 Err(e) => {
                     error!("recv failed: {e:?}");
                     continue 'read;
-                },
+                }
             };
 
             debug!("processed {read} bytes");
@@ -243,52 +235,43 @@ fn main() {
                             hdrs_to_strings(&list),
                             stream_id
                         );
-                    },
+                    }
 
                     Ok((stream_id, quiche::h3::Event::Data)) => {
-                        while let Ok(read) =
-                            http3_conn.recv_body(&mut conn, stream_id, &mut buf)
-                        {
-                            debug!(
-                                "got {read} bytes of response data on stream {stream_id}"
-                            );
+                        while let Ok(read) = http3_conn.recv_body(&mut conn, stream_id, &mut buf) {
+                            debug!("got {read} bytes of response data on stream {stream_id}");
 
-                            print!("{}", unsafe {
-                                std::str::from_utf8_unchecked(&buf[..read])
-                            });
+                            print!("{}", unsafe { std::str::from_utf8_unchecked(&buf[..read]) });
                         }
-                    },
+                    }
 
                     Ok((_stream_id, quiche::h3::Event::Finished)) => {
-                        info!(
-                            "response received in {:?}, closing...",
-                            req_start.elapsed()
-                        );
+                        info!("response received in {:?}, closing...", req_start.elapsed());
 
                         conn.close(true, 0x100, b"kthxbye").unwrap();
-                    },
+                    }
 
                     Ok((_stream_id, quiche::h3::Event::Reset(e))) => {
                         error!("request was reset by peer with {e}, closing...");
 
                         conn.close(true, 0x100, b"kthxbye").unwrap();
-                    },
+                    }
 
                     Ok((_, quiche::h3::Event::PriorityUpdate)) => unreachable!(),
 
                     Ok((goaway_id, quiche::h3::Event::GoAway)) => {
                         info!("GOAWAY id={goaway_id}");
-                    },
+                    }
 
                     Err(quiche::h3::Error::Done) => {
                         break;
-                    },
+                    }
 
                     Err(e) => {
                         error!("HTTP/3 processing failed: {e:?}");
 
                         break;
-                    },
+                    }
                 }
             }
         }
@@ -302,14 +285,14 @@ fn main() {
                 Err(quiche::Error::Done) => {
                     debug!("done writing");
                     break;
-                },
+                }
 
                 Err(e) => {
                     error!("send failed: {e:?}");
 
                     conn.close(false, 0x1, b"fail").ok();
                     break;
-                },
+                }
             };
 
             if let Err(e) = socket.send_to(&out[..write], send_info.to) {

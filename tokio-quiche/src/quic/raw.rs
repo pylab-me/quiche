@@ -35,12 +35,13 @@
 //! [`connect`](crate::quic::connect) (for clients) or [`listen`](crate::listen)
 //! (for servers) API.
 
-use datagram_socket::DatagramSocketSend;
 use std::sync::Arc;
-use std::task::ready;
 use std::task::Context;
 use std::task::Poll;
+use std::task::ready;
 use std::time::Instant;
+
+use datagram_socket::DatagramSocketSend;
 use tokio::sync::mpsc;
 
 use super::connection::InitialQuicConnection;
@@ -88,7 +89,9 @@ where
 /// [`quiche::Connection`]. To start handshaking and consuming packets from the
 /// returned channel, use the methods on [`InitialQuicConnection`].
 pub fn wrap_quiche_conn<Tx, R, M>(
-    quiche_conn: QuicheConnection, tx_socket: Socket<Arc<Tx>, R>, metrics: M,
+    quiche_conn: QuicheConnection,
+    tx_socket: Socket<Arc<Tx>, R>,
+    metrics: M,
 ) -> ConnWrapperResult<Tx, M>
 where
     Tx: DatagramSocketSend + Send + 'static + ?Sized,

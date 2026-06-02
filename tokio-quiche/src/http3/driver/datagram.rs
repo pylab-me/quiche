@@ -26,9 +26,7 @@
 
 use datagram_socket::DgramBuffer;
 use quiche::h3::NameValue;
-use quiche::h3::{
-    self,
-};
+use quiche::h3::{self};
 
 use super::InboundFrame;
 use crate::buf_factory::BufFactory;
@@ -36,9 +34,7 @@ use crate::quic::QuicheConnection;
 
 /// Extracts the DATAGRAM flow ID or quarter stream id proxied over the given
 /// `stream_id`, or `None` if this is not a proxy request.
-pub(crate) fn extract_quarter_stream_id(
-    stream_id: u64, headers: &[h3::Header],
-) -> Option<u64> {
+pub(crate) fn extract_quarter_stream_id(stream_id: u64, headers: &[h3::Header]) -> Option<u64> {
     let mut method = None;
     let mut datagram_flow_id: Option<u64> = None;
     let mut protocol = None;
@@ -47,17 +43,16 @@ pub(crate) fn extract_quarter_stream_id(
         match header.name() {
             b":method" => method = Some(header.value()),
             b":protocol" => protocol = Some(header.value()),
-            b"datagram-flow-id" =>
-                datagram_flow_id = std::str::from_utf8(header.value())
-                    .ok()
-                    .and_then(|v| v.parse().ok()),
-            _ => {},
+            b"datagram-flow-id" => {
+                datagram_flow_id =
+                    std::str::from_utf8(header.value()).ok().and_then(|v| v.parse().ok())
+            }
+            _ => {}
         };
 
         // We have all of the information needed to get a flow_id or
         // quarter_stream_id
-        if method.is_some() && (datagram_flow_id.is_some() || protocol.is_some())
-        {
+        if method.is_some() && (datagram_flow_id.is_some() || protocol.is_some()) {
             break;
         }
     }
@@ -79,14 +74,17 @@ pub(crate) fn extract_quarter_stream_id(
 /// `quarter_stream_id`.
 #[inline]
 pub(crate) fn send_h3_dgram(
-    conn: &mut QuicheConnection, quarter_stream_id: u64, dgram: DgramBuffer,
+    conn: &mut QuicheConnection,
+    quarter_stream_id: u64,
+    dgram: DgramBuffer,
 ) -> quiche::Result<()> {
     conn.dgram_send_buf(h3_dgram_add_quarter_stream_id(quarter_stream_id, dgram)?)
 }
 
 /// Prepend the `quarter_stream_id` to `dgram`
 fn h3_dgram_add_quarter_stream_id(
-    quarter_stream_id: u64, mut dgram: DgramBuffer,
+    quarter_stream_id: u64,
+    mut dgram: DgramBuffer,
 ) -> quiche::Result<DgramBuffer> {
     let mut prefix_buf = [0u8; 8];
     let mut enc = octets::OctetsMut::with_slice(&mut prefix_buf);
@@ -109,9 +107,7 @@ fn h3_dgram_add_quarter_stream_id(
 /// Strips the varint-encoded quarter stream ID from the front of `dgram` and
 /// returns `(quarter_stream_id, dgram)` with the cursor advanced past the
 /// prefix.
-fn h3_dgram_remove_quarter_stream_id(
-    mut dgram: DgramBuffer,
-) -> quiche::Result<(u64, DgramBuffer)> {
+fn h3_dgram_remove_quarter_stream_id(mut dgram: DgramBuffer) -> quiche::Result<(u64, DgramBuffer)> {
     let mut b = octets::Octets::with_slice(dgram.as_slice());
     let quarter_stream_id = b.get_varint()?;
     // Advance the cursor past the varint prefix — zero copy.
@@ -124,9 +120,7 @@ fn h3_dgram_remove_quarter_stream_id(
 ///
 /// [`quiche::Error::Done`] is returned if there is no datagram to read.
 #[inline]
-pub(crate) fn receive_h3_dgram(
-    conn: &mut QuicheConnection,
-) -> quiche::Result<(u64, InboundFrame)> {
+pub(crate) fn receive_h3_dgram(conn: &mut QuicheConnection) -> quiche::Result<(u64, InboundFrame)> {
     let dgram = conn.dgram_recv_buf()?;
     let (quarter_stream_id, dgram) = h3_dgram_remove_quarter_stream_id(dgram)?;
     Ok((quarter_stream_id, InboundFrame::Datagram(dgram)))
@@ -163,8 +157,7 @@ mod tests {
     fn h3_dgram_remove_quarter_stream_id_tests() {
         let dgram = DgramBuffer::from_slice(&[1, 2, 3, 4]);
         let dgram = h3_dgram_add_quarter_stream_id(67, dgram).unwrap();
-        let (quarter_stream_id, rest) =
-            h3_dgram_remove_quarter_stream_id(dgram).unwrap();
+        let (quarter_stream_id, rest) = h3_dgram_remove_quarter_stream_id(dgram).unwrap();
 
         assert_eq!(quarter_stream_id, 67);
         assert_eq!(rest.as_slice(), &[1, 2, 3, 4]);

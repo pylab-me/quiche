@@ -24,11 +24,11 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::collections::VecDeque;
+
 use crate::BufFactory;
 use crate::Error;
 use crate::Result;
-
-use std::collections::VecDeque;
 
 /// Keeps track of DATAGRAM frames.
 #[derive(Default)]
@@ -72,7 +72,7 @@ impl<F: BufFactory> DatagramQueue<F> {
 
                 buf[..len].copy_from_slice(&d.as_ref()[..len]);
                 Ok(len)
-            },
+            }
 
             None => Err(Error::Done),
         }
@@ -80,8 +80,7 @@ impl<F: BufFactory> DatagramQueue<F> {
 
     pub fn pop(&mut self) -> Option<F::DgramBuf> {
         if let Some(d) = self.queue.pop_front() {
-            self.queue_bytes_size =
-                self.queue_bytes_size.saturating_sub(d.as_ref().len());
+            self.queue_bytes_size = self.queue_bytes_size.saturating_sub(d.as_ref().len());
             return Some(d);
         }
 
@@ -94,10 +93,7 @@ impl<F: BufFactory> DatagramQueue<F> {
 
     pub fn purge<FN: Fn(&[u8]) -> bool>(&mut self, f: FN) {
         self.queue.retain(|d| !f(d.as_ref()));
-        self.queue_bytes_size = self
-            .queue
-            .iter()
-            .fold(0, |total, d| total + d.as_ref().len());
+        self.queue_bytes_size = self.queue.iter().fold(0, |total, d| total + d.as_ref().len());
     }
 
     pub fn is_full(&self) -> bool {

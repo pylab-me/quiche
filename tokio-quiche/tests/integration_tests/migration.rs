@@ -24,10 +24,11 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use h3i::quiche;
 use std::net::SocketAddr;
-use tokio_quiche::quic::SimpleConnectionIdGenerator;
+
+use h3i::quiche;
 use tokio_quiche::ConnectionIdGenerator as _;
+use tokio_quiche::quic::SimpleConnectionIdGenerator;
 
 use crate::fixtures::*;
 
@@ -76,8 +77,7 @@ async fn run_migration_test(active: bool, base_port: u16) {
     );
     let server_addr = extract_host_ipv4(&url);
 
-    let mut client_config =
-        quiche::Config::new(quiche::PROTOCOL_VERSION).unwrap();
+    let mut client_config = quiche::Config::new(quiche::PROTOCOL_VERSION).unwrap();
     client_config.set_application_protos(&[b"h3"]).unwrap();
     client_config.set_initial_max_data(1500);
     client_config.set_initial_max_stream_data_bidi_local(1500);
@@ -107,8 +107,7 @@ async fn run_migration_test(active: bool, base_port: u16) {
     if active {
         // Supply a second SCID to the server to facilitate active migration
         let extra_scid = SimpleConnectionIdGenerator.new_connection_id();
-        conn.new_scid(&extra_scid, 0xAABBCCDDEEFF0123454678, false)
-            .unwrap();
+        conn.new_scid(&extra_scid, 0xAABBCCDDEEFF0123454678, false).unwrap();
     }
 
     // Handshake.
@@ -119,8 +118,7 @@ async fn run_migration_test(active: bool, base_port: u16) {
 
     // Create a new HTTP/3 connection once the QUIC connection is established.
     let h3_config = quiche::h3::Config::new().unwrap();
-    let mut h3_conn =
-        quiche::h3::Connection::with_transport(&mut conn, &h3_config).unwrap();
+    let mut h3_conn = quiche::h3::Connection::with_transport(&mut conn, &h3_config).unwrap();
 
     // Client sends first request on the initial path.
     let req = vec![
@@ -139,14 +137,12 @@ async fn run_migration_test(active: bool, base_port: u16) {
 
     // Client migrates to new address.
     let migrated_addr = SocketAddr::new(client_addr.ip(), base_port + 1);
-    let migrated_socket =
-        tokio::net::UdpSocket::bind(migrated_addr).await.unwrap();
+    let migrated_socket = tokio::net::UdpSocket::bind(migrated_addr).await.unwrap();
 
     let client_addr = if active {
         // We actively switch the connection to `migrated_addr` and report that
         // address for all packets we receive from now on.
-        conn.migrate_source(migrated_addr)
-            .expect("active migration should succeed");
+        conn.migrate_source(migrated_addr).expect("active migration should succeed");
         migrated_addr
     } else {
         // We keep using the original client address to simulate the fact that the
@@ -175,9 +171,7 @@ async fn run_migration_test(active: bool, base_port: u16) {
     assert_eq!(process_h3_events(&mut h3_conn, &mut conn), (true, true));
 }
 
-async fn emit_flight(
-    socket: &tokio::net::UdpSocket, conn: &mut quiche::Connection,
-) {
+async fn emit_flight(socket: &tokio::net::UdpSocket, conn: &mut quiche::Connection) {
     let flight = match quiche::test_utils::emit_flight(conn) {
         Ok(v) => v,
 
@@ -195,7 +189,8 @@ async fn emit_flight(
 }
 
 async fn process_flight(
-    socket: &tokio::net::UdpSocket, client_addr: std::net::SocketAddr,
+    socket: &tokio::net::UdpSocket,
+    client_addr: std::net::SocketAddr,
     conn: &mut quiche::Connection,
 ) {
     let mut buf = [0; 65535];
@@ -223,7 +218,8 @@ async fn process_flight(
 }
 
 fn process_h3_events(
-    h3_conn: &mut quiche::h3::Connection, conn: &mut quiche::Connection,
+    h3_conn: &mut quiche::h3::Connection,
+    conn: &mut quiche::Connection,
 ) -> (bool, bool) {
     let mut buf = [0; 65535];
 
@@ -236,14 +232,14 @@ fn process_h3_events(
             Ok((stream_id, quiche::h3::Event::Data)) => {
                 // Drain stream and drop the data.
                 while h3_conn.recv_body(conn, stream_id, &mut buf).is_ok() {}
-            },
+            }
 
             Ok((_, quiche::h3::Event::Finished)) => {
                 // Request is complete, return.
                 return (got_headers, true);
-            },
+            }
 
-            _ => {},
+            _ => {}
         }
     }
 }

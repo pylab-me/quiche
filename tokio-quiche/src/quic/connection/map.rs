@@ -24,15 +24,16 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use super::Incoming;
-use super::InitialQuicConnection;
-use crate::metrics::Metrics;
+use std::collections::BTreeMap;
 
 use datagram_socket::DatagramSocketSend;
 use quiche::ConnectionId;
 use quiche::MAX_CONN_ID_LEN;
-use std::collections::BTreeMap;
 use tokio::sync::mpsc;
+
+use super::Incoming;
+use super::InitialQuicConnection;
+use crate::metrics::Metrics;
 
 const U64_SZ: usize = std::mem::size_of::<u64>();
 const MAX_CONN_ID_QUADS: usize = MAX_CONN_ID_LEN.div_ceil(U64_SZ);
@@ -44,11 +45,7 @@ const CONN_ID_USABLE_LEN: usize = min_usize(
 );
 
 const fn min_usize(v1: usize, v2: usize) -> usize {
-    if v1 < v2 {
-        v1
-    } else {
-        v2
-    }
+    if v1 < v2 { v1 } else { v2 }
 }
 
 /// A non unique connection identifier, multiple Cids can map to the same
@@ -82,7 +79,7 @@ impl From<&ConnectionId<'_>> for CidOwned {
                     let mut remainder = [0u8; U64_SZ];
                     remainder[..c.len()].copy_from_slice(c);
                     u64::from_le_bytes(remainder)
-                },
+                }
             })
             .enumerate()
             .for_each(|(i, v)| cid[i] = v);
@@ -107,7 +104,9 @@ pub(crate) struct ConnectionMap {
 
 impl ConnectionMap {
     pub(crate) fn insert<Tx, M>(
-        &mut self, cid: &ConnectionId<'_>, conn: &InitialQuicConnection<Tx, M>,
+        &mut self,
+        cid: &ConnectionId<'_>,
+        conn: &InitialQuicConnection<Tx, M>,
     ) where
         Tx: DatagramSocketSend + Send + 'static,
         M: Metrics,
@@ -116,9 +115,7 @@ impl ConnectionMap {
         self.quic_id_map.insert(cid.into(), ev_sender);
     }
 
-    pub(crate) fn map_cid(
-        &mut self, existing_cid: &ConnectionId<'_>, new_cid: &ConnectionId<'_>,
-    ) {
+    pub(crate) fn map_cid(&mut self, existing_cid: &ConnectionId<'_>, new_cid: &ConnectionId<'_>) {
         if let Some(ev_sender) = self.quic_id_map.get(&existing_cid.into()) {
             self.quic_id_map.insert(new_cid.into(), ev_sender.clone());
         }
@@ -128,9 +125,7 @@ impl ConnectionMap {
         self.quic_id_map.remove(&cid.into());
     }
 
-    pub(crate) fn get(
-        &self, id: &ConnectionId,
-    ) -> Option<&mpsc::Sender<Incoming>> {
+    pub(crate) fn get(&self, id: &ConnectionId) -> Option<&mpsc::Sender<Incoming>> {
         if id.len() == MAX_CONN_ID_LEN {
             // Although both branches run the same code, the one here will
             // generate an optimized version for the length we are
@@ -144,8 +139,9 @@ impl ConnectionMap {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use quiche::ConnectionId;
+
+    use super::*;
 
     #[test]
     fn cid_storage() {

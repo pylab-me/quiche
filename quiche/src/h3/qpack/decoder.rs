@@ -25,14 +25,12 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use super::Error;
-use super::Result;
-
-use crate::h3::Header;
-
 use super::INDEXED;
 use super::INDEXED_WITH_POST_BASE;
 use super::LITERAL;
 use super::LITERAL_WITH_NAME_REF;
+use super::Result;
+use crate::h3::Header;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Representation {
@@ -119,7 +117,7 @@ impl Decoder {
 
                     let hdr = Header::new(name, value);
                     out.push(hdr);
-                },
+                }
 
                 Representation::IndexedWithPostBase => {
                     let index = decode_int(&mut b, 4)?;
@@ -128,7 +126,7 @@ impl Decoder {
 
                     // TODO: implement dynamic table
                     return Err(Error::InvalidHeaderValue);
-                },
+                }
 
                 Representation::Literal => {
                     let name_huff = b.as_ref()[0] & 0x08 == 0x08;
@@ -145,9 +143,7 @@ impl Decoder {
                     let name = name.to_vec();
                     let value = decode_str(&mut b)?;
 
-                    trace!(
-                        "Literal Without Name Reference name={name:?} value={value:?}",
-                    );
+                    trace!("Literal Without Name Reference name={name:?} value={value:?}",);
 
                     left = left
                         .checked_sub((name.len() + value.len()) as u64)
@@ -157,7 +153,7 @@ impl Decoder {
                     // from `name` and `value`, which are already String.
                     let hdr = Header(name, value);
                     out.push(hdr);
-                },
+                }
 
                 Representation::LiteralWithNameRef => {
                     const STATIC: u8 = 0x10;
@@ -166,9 +162,7 @@ impl Decoder {
                     let name_idx = decode_int(&mut b, 4)?;
                     let value = decode_str(&mut b)?;
 
-                    trace!(
-                        "Literal name_idx={name_idx} static={s} value={value:?}"
-                    );
+                    trace!("Literal name_idx={name_idx} static={s} value={value:?}");
 
                     if !s {
                         // TODO: implement dynamic table
@@ -186,14 +180,14 @@ impl Decoder {
                     // as it is just a reference.
                     let hdr = Header(name.to_vec(), value);
                     out.push(hdr);
-                },
+                }
 
                 Representation::LiteralWithPostBase => {
                     trace!("Literal With Post Base");
 
                     // TODO: implement dynamic table
                     return Err(Error::InvalidHeaderValue);
-                },
+                }
             }
         }
 
@@ -224,9 +218,7 @@ fn decode_int(b: &mut octets::Octets, prefix: usize) -> Result<u64> {
     while b.cap() > 0 {
         let byte = b.get_u8()?;
 
-        let inc = u64::from(byte & 0x7f)
-            .checked_shl(shift)
-            .ok_or(Error::BufferTooShort)?;
+        let inc = u64::from(byte & 0x7f).checked_shl(shift).ok_or(Error::BufferTooShort)?;
 
         val = val.checked_add(inc).ok_or(Error::BufferTooShort)?;
 

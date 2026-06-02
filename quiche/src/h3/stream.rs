@@ -24,12 +24,10 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use crate::buffers::BufFactory;
-
 use super::Error;
 use super::Result;
-
 use super::frame;
+use crate::buffers::BufFactory;
 
 pub const HTTP3_CONTROL_STREAM_TYPE_ID: u64 = 0x0;
 pub const HTTP3_PUSH_STREAM_TYPE_ID: u64 = 0x1;
@@ -249,7 +247,7 @@ impl Stream {
                 self.remote_initialized = true;
 
                 State::QpackInstruction
-            },
+            }
 
             Type::Unknown => State::Drain,
         };
@@ -282,58 +280,50 @@ impl Stream {
                 // initialized, no more SETTINGS are permitted.
                 match (ty, self.remote_initialized) {
                     // Initialize control stream.
-                    (frame::SETTINGS_FRAME_TYPE_ID, false) =>
-                        self.remote_initialized = true,
+                    (frame::SETTINGS_FRAME_TYPE_ID, false) => self.remote_initialized = true,
 
                     // Non-SETTINGS frames not allowed on control stream
                     // before initialization.
                     (_, false) => return Err(Error::MissingSettings),
 
                     // Additional SETTINGS frame.
-                    (frame::SETTINGS_FRAME_TYPE_ID, true) =>
-                        return Err(Error::FrameUnexpected),
+                    (frame::SETTINGS_FRAME_TYPE_ID, true) => return Err(Error::FrameUnexpected),
 
                     // Frames that can't be received on control stream
                     // after initialization.
-                    (frame::DATA_FRAME_TYPE_ID, true) =>
-                        return Err(Error::FrameUnexpected),
+                    (frame::DATA_FRAME_TYPE_ID, true) => return Err(Error::FrameUnexpected),
 
-                    (frame::HEADERS_FRAME_TYPE_ID, true) =>
-                        return Err(Error::FrameUnexpected),
+                    (frame::HEADERS_FRAME_TYPE_ID, true) => return Err(Error::FrameUnexpected),
 
-                    (frame::PUSH_PROMISE_FRAME_TYPE_ID, true) =>
-                        return Err(Error::FrameUnexpected),
+                    (frame::PUSH_PROMISE_FRAME_TYPE_ID, true) => {
+                        return Err(Error::FrameUnexpected);
+                    }
 
                     // All other frames are ignored after initialization.
                     (_, true) => (),
                 }
-            },
+            }
 
             Some(Type::Request) => {
                 self.validate_request_frame_type(ty)?;
-            },
+            }
 
             Some(Type::Push) => {
                 match ty {
                     // Frames that can never be received on request streams.
-                    frame::CANCEL_PUSH_FRAME_TYPE_ID =>
-                        return Err(Error::FrameUnexpected),
+                    frame::CANCEL_PUSH_FRAME_TYPE_ID => return Err(Error::FrameUnexpected),
 
-                    frame::SETTINGS_FRAME_TYPE_ID =>
-                        return Err(Error::FrameUnexpected),
+                    frame::SETTINGS_FRAME_TYPE_ID => return Err(Error::FrameUnexpected),
 
-                    frame::PUSH_PROMISE_FRAME_TYPE_ID =>
-                        return Err(Error::FrameUnexpected),
+                    frame::PUSH_PROMISE_FRAME_TYPE_ID => return Err(Error::FrameUnexpected),
 
-                    frame::GOAWAY_FRAME_TYPE_ID =>
-                        return Err(Error::FrameUnexpected),
+                    frame::GOAWAY_FRAME_TYPE_ID => return Err(Error::FrameUnexpected),
 
-                    frame::MAX_PUSH_FRAME_TYPE_ID =>
-                        return Err(Error::FrameUnexpected),
+                    frame::MAX_PUSH_FRAME_TYPE_ID => return Err(Error::FrameUnexpected),
 
                     _ => (),
                 }
-            },
+            }
 
             _ => return Err(Error::FrameUnexpected),
         }
@@ -362,12 +352,12 @@ impl Stream {
         // endpoint opened it.
         if matches!(
             ty,
-            frame::CANCEL_PUSH_FRAME_TYPE_ID |
-                frame::SETTINGS_FRAME_TYPE_ID |
-                frame::GOAWAY_FRAME_TYPE_ID |
-                frame::MAX_PUSH_FRAME_TYPE_ID |
-                frame::PRIORITY_UPDATE_FRAME_REQUEST_TYPE_ID |
-                frame::PRIORITY_UPDATE_FRAME_PUSH_TYPE_ID
+            frame::CANCEL_PUSH_FRAME_TYPE_ID
+                | frame::SETTINGS_FRAME_TYPE_ID
+                | frame::GOAWAY_FRAME_TYPE_ID
+                | frame::MAX_PUSH_FRAME_TYPE_ID
+                | frame::PRIORITY_UPDATE_FRAME_REQUEST_TYPE_ID
+                | frame::PRIORITY_UPDATE_FRAME_PUSH_TYPE_ID
         ) {
             return Err(Error::FrameUnexpected);
         }
@@ -381,10 +371,9 @@ impl Stream {
         match (ty, self.remote_initialized) {
             (frame::HEADERS_FRAME_TYPE_ID, false) => {
                 self.remote_initialized = true;
-            },
+            }
 
-            (frame::DATA_FRAME_TYPE_ID, false) =>
-                return Err(Error::FrameUnexpected),
+            (frame::DATA_FRAME_TYPE_ID, false) => return Err(Error::FrameUnexpected),
 
             (frame::HEADERS_FRAME_TYPE_ID, true) => {
                 if self.trailers_received {
@@ -394,7 +383,7 @@ impl Stream {
                 if self.data_received {
                     self.trailers_received = true;
                 }
-            },
+            }
 
             (frame::DATA_FRAME_TYPE_ID, true) => {
                 if self.trailers_received {
@@ -402,7 +391,7 @@ impl Stream {
                 }
 
                 self.data_received = true;
-            },
+            }
 
             // All other frames can be ignored regardless of stream state.
             _ => (),
@@ -428,17 +417,17 @@ impl Stream {
                 // These frame types can never have 0 payload length because
                 // they always have fields that must be populated.
                 Some(
-                    frame::GOAWAY_FRAME_TYPE_ID |
-                    frame::PUSH_PROMISE_FRAME_TYPE_ID |
-                    frame::CANCEL_PUSH_FRAME_TYPE_ID |
-                    frame::MAX_PUSH_FRAME_TYPE_ID,
+                    frame::GOAWAY_FRAME_TYPE_ID
+                    | frame::PUSH_PROMISE_FRAME_TYPE_ID
+                    | frame::CANCEL_PUSH_FRAME_TYPE_ID
+                    | frame::MAX_PUSH_FRAME_TYPE_ID,
                 ) => {
                     if len == 0 {
                         return Err(Error::FrameError);
                     }
 
                     (State::FramePayload, true)
-                },
+                }
 
                 _ => (State::FramePayload, true),
             };
@@ -457,7 +446,8 @@ impl Stream {
     /// When not enough data can be read to complete the state, this returns
     /// `Error::Done`.
     pub fn try_fill_buffer<F: BufFactory>(
-        &mut self, conn: &mut crate::Connection<F>,
+        &mut self,
+        conn: &mut crate::Connection<F>,
     ) -> Result<()> {
         // If no bytes are required to be read, return early.
         if self.state_buffer_complete() {
@@ -469,33 +459,29 @@ impl Stream {
         let read = match conn.stream_recv(self.id, buf) {
             Ok((len, fin)) => {
                 // Check whether one of the critical stream was closed.
-                if fin &&
-                    matches!(
+                if fin
+                    && matches!(
                         self.ty,
-                        Some(Type::Control) |
-                            Some(Type::QpackEncoder) |
-                            Some(Type::QpackDecoder)
+                        Some(Type::Control) | Some(Type::QpackEncoder) | Some(Type::QpackDecoder)
                     )
                 {
                     super::close_conn_critical_stream(conn)?;
                 }
 
                 len
-            },
+            }
 
             Err(e @ crate::Error::StreamReset(_)) => {
                 // Check whether one of the critical stream was closed.
                 if matches!(
                     self.ty,
-                    Some(Type::Control) |
-                        Some(Type::QpackEncoder) |
-                        Some(Type::QpackDecoder)
+                    Some(Type::Control) | Some(Type::QpackEncoder) | Some(Type::QpackDecoder)
                 ) {
                     super::close_conn_critical_stream(conn)?;
                 }
 
                 return Err(e.into());
-            },
+            }
 
             Err(e) => {
                 // The stream is not readable anymore, so re-arm the Data event.
@@ -504,7 +490,7 @@ impl Stream {
                 }
 
                 return Err(e.into());
-            },
+            }
         };
 
         trace!(
@@ -546,8 +532,7 @@ impl Stream {
     }
 
     pub fn increment_headers_received(&mut self) {
-        self.headers_received_count =
-            self.headers_received_count.saturating_add(1);
+        self.headers_received_count = self.headers_received_count.saturating_add(1);
     }
 
     pub fn headers_received_count(&self) -> usize {
@@ -567,9 +552,7 @@ impl Stream {
     /// This is intended to replace `try_fill_buffer()` in tests, in order to
     /// avoid having to setup a transport connection.
     #[cfg(test)]
-    fn try_fill_buffer_for_tests(
-        &mut self, stream: &mut std::io::Cursor<Vec<u8>>,
-    ) -> Result<()> {
+    fn try_fill_buffer_for_tests(&mut self, stream: &mut std::io::Cursor<Vec<u8>>) -> Result<()> {
         // If no bytes are required to be read, return early
         if self.state_buffer_complete() {
             return Ok(());
@@ -617,11 +600,8 @@ impl Stream {
         let payload_len = self.state_len as u64;
 
         // TODO: properly propagate frame parsing errors.
-        let frame = frame::Frame::from_bytes(
-            self.frame_type.unwrap(),
-            payload_len,
-            &self.state_buf,
-        )?;
+        let frame =
+            frame::Frame::from_bytes(self.frame_type.unwrap(), payload_len, &self.state_buf)?;
 
         self.state_transition(State::FrameType, 1, true)?;
 
@@ -630,7 +610,9 @@ impl Stream {
 
     /// Tries to read DATA payload from the transport stream.
     pub fn try_consume_data<F: BufFactory, OUT: bytes::BufMut>(
-        &mut self, conn: &mut crate::Connection<F>, out: OUT,
+        &mut self,
+        conn: &mut crate::Connection<F>,
+        out: OUT,
     ) -> Result<(usize, bool)> {
         debug_assert_eq!(self.state, State::Data);
         let out = out.limit(self.state_len - self.state_off);
@@ -645,7 +627,7 @@ impl Stream {
                 }
 
                 return Err(e.into());
-            },
+            }
         };
 
         self.state_off += len;
@@ -674,7 +656,9 @@ impl Stream {
     /// avoid having to setup a transport connection.
     #[cfg(test)]
     fn try_consume_data_for_tests(
-        &mut self, stream: &mut std::io::Cursor<Vec<u8>>, out: &mut [u8],
+        &mut self,
+        stream: &mut std::io::Cursor<Vec<u8>>,
+        out: &mut [u8],
     ) -> Result<usize> {
         let left = std::cmp::min(out.len(), self.state_len - self.state_off);
 
@@ -731,7 +715,10 @@ impl Stream {
     /// Transitions the stream to a new state, and optionally resets the state
     /// buffer.
     fn state_transition(
-        &mut self, new_state: State, expected_len: usize, resize: bool,
+        &mut self,
+        new_state: State,
+        expected_len: usize,
+        resize: bool,
     ) -> Result<()> {
         // Some states don't need the state buffer, so don't resize it if not
         // necessary.
@@ -756,9 +743,8 @@ impl Stream {
 
 #[cfg(test)]
 mod tests {
-    use crate::h3::frame::*;
-
     use super::*;
+    use crate::h3::frame::*;
 
     fn open_uni(b: &mut octets::OctetsMut, ty: u64) -> Result<Stream> {
         let stream = <Stream>::new(2, false);
@@ -770,7 +756,9 @@ mod tests {
     }
 
     fn parse_uni(
-        stream: &mut Stream, ty: u64, cursor: &mut std::io::Cursor<Vec<u8>>,
+        stream: &mut Stream,
+        ty: u64,
+        cursor: &mut std::io::Cursor<Vec<u8>>,
     ) -> Result<()> {
         stream.try_fill_buffer_for_tests(cursor)?;
 
@@ -781,9 +769,7 @@ mod tests {
         Ok(())
     }
 
-    fn parse_skip_frame(
-        stream: &mut Stream, cursor: &mut std::io::Cursor<Vec<u8>>,
-    ) -> Result<()> {
+    fn parse_skip_frame(stream: &mut Stream, cursor: &mut std::io::Cursor<Vec<u8>>) -> Result<()> {
         // Parse the frame type.
         stream.try_fill_buffer_for_tests(cursor)?;
 
@@ -836,8 +822,7 @@ mod tests {
 
         let mut cursor = std::io::Cursor::new(d);
 
-        parse_uni(&mut stream, HTTP3_CONTROL_STREAM_TYPE_ID, &mut cursor)
-            .unwrap();
+        parse_uni(&mut stream, HTTP3_CONTROL_STREAM_TYPE_ID, &mut cursor).unwrap();
         assert_eq!(stream.state, State::FrameType);
 
         // Parse the SETTINGS frame type.
@@ -886,8 +871,7 @@ mod tests {
 
         let mut cursor = std::io::Cursor::new(d);
 
-        parse_uni(&mut stream, HTTP3_CONTROL_STREAM_TYPE_ID, &mut cursor)
-            .unwrap();
+        parse_uni(&mut stream, HTTP3_CONTROL_STREAM_TYPE_ID, &mut cursor).unwrap();
         assert_eq!(stream.state, State::FrameType);
 
         // Parse the SETTINGS frame type.
@@ -943,8 +927,7 @@ mod tests {
 
         let mut cursor = std::io::Cursor::new(d);
 
-        parse_uni(&mut stream, HTTP3_CONTROL_STREAM_TYPE_ID, &mut cursor)
-            .unwrap();
+        parse_uni(&mut stream, HTTP3_CONTROL_STREAM_TYPE_ID, &mut cursor).unwrap();
         assert_eq!(stream.state, State::FrameType);
 
         // Parse the SETTINGS frame type.
@@ -1008,8 +991,7 @@ mod tests {
 
         let mut cursor = std::io::Cursor::new(d);
 
-        parse_uni(&mut stream, HTTP3_CONTROL_STREAM_TYPE_ID, &mut cursor)
-            .unwrap();
+        parse_uni(&mut stream, HTTP3_CONTROL_STREAM_TYPE_ID, &mut cursor).unwrap();
         assert_eq!(stream.state, State::FrameType);
 
         // Parse GOAWAY.
@@ -1052,8 +1034,7 @@ mod tests {
 
         let mut cursor = std::io::Cursor::new(d);
 
-        parse_uni(&mut stream, HTTP3_CONTROL_STREAM_TYPE_ID, &mut cursor)
-            .unwrap();
+        parse_uni(&mut stream, HTTP3_CONTROL_STREAM_TYPE_ID, &mut cursor).unwrap();
         assert_eq!(stream.state, State::FrameType);
 
         // Parse first SETTINGS frame.
@@ -1258,9 +1239,7 @@ mod tests {
 
         let stream_ty = stream.try_consume_varint().unwrap();
         assert_eq!(stream_ty, 33);
-        stream
-            .set_ty(Type::deserialize(stream_ty).unwrap())
-            .unwrap();
+        stream.set_ty(Type::deserialize(stream_ty).unwrap()).unwrap();
         assert_eq!(stream.state, State::Drain);
     }
 
@@ -1441,8 +1420,7 @@ mod tests {
 
         let mut cursor = std::io::Cursor::new(d);
 
-        parse_uni(&mut stream, HTTP3_CONTROL_STREAM_TYPE_ID, &mut cursor)
-            .unwrap();
+        parse_uni(&mut stream, HTTP3_CONTROL_STREAM_TYPE_ID, &mut cursor).unwrap();
 
         // Skip SETTINGS frame type.
         parse_skip_frame(&mut stream, &mut cursor).unwrap();
@@ -1522,8 +1500,7 @@ mod tests {
 
         let mut cursor = std::io::Cursor::new(d);
 
-        parse_uni(&mut stream, HTTP3_CONTROL_STREAM_TYPE_ID, &mut cursor)
-            .unwrap();
+        parse_uni(&mut stream, HTTP3_CONTROL_STREAM_TYPE_ID, &mut cursor).unwrap();
 
         // Skip SETTINGS frame type.
         parse_skip_frame(&mut stream, &mut cursor).unwrap();
@@ -1570,8 +1547,7 @@ mod tests {
 
         let mut cursor = std::io::Cursor::new(d);
 
-        parse_uni(&mut stream, HTTP3_CONTROL_STREAM_TYPE_ID, &mut cursor)
-            .unwrap();
+        parse_uni(&mut stream, HTTP3_CONTROL_STREAM_TYPE_ID, &mut cursor).unwrap();
 
         // Skip SETTINGS frame type.
         parse_skip_frame(&mut stream, &mut cursor).unwrap();

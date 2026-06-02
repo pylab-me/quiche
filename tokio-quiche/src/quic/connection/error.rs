@@ -24,8 +24,9 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use crate::result::QuicResult;
 use std::io;
+
+use crate::result::QuicResult;
 
 /// Additional error types that can occur during a QUIC handshake.
 ///
@@ -48,8 +49,7 @@ impl From<HandshakeError> for io::Error {
     fn from(err: HandshakeError) -> Self {
         match err {
             HandshakeError::Timeout => Self::new(io::ErrorKind::TimedOut, err),
-            HandshakeError::ConnectionClosed =>
-                Self::new(io::ErrorKind::NotConnected, err),
+            HandshakeError::ConnectionClosed => Self::new(io::ErrorKind::NotConnected, err),
         }
     }
 }

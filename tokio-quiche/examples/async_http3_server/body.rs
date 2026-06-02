@@ -24,6 +24,10 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::pin::Pin;
+use std::task::Context;
+use std::task::Poll;
+
 use futures_util::SinkExt;
 use futures_util::StreamExt;
 use http::Request;
@@ -31,9 +35,6 @@ use http_body::Body;
 use http_body::Frame;
 use http_body::SizeHint;
 use http_body_util::BodyDataStream;
-use std::pin::Pin;
-use std::task::Context;
-use std::task::Poll;
 use tokio_quiche::buf_factory::BufFactory as BufFactoryImpl;
 use tokio_quiche::http3::driver::OutboundFrame;
 use tokio_quiche::http3::driver::OutboundFrameSender;
@@ -80,22 +81,17 @@ impl ExampleBody {
     /// Use the `frame_sender` to send DATA frames to tokio-quiche.
     ///
     /// The sender is paired with the underlying tokio-quiche `H3Driver`.
-    pub(crate) async fn send(
-        self, mut frame_sender: OutboundFrameSender,
-    ) -> Option<()> {
+    pub(crate) async fn send(self, mut frame_sender: OutboundFrameSender) -> Option<()> {
         let mut body_stream = BodyDataStream::new(self);
 
         while let Some(chunk) = body_stream.next().await {
             match chunk {
                 Ok(chunk) => {
                     for chunk in chunk.chunks(BufFactoryImpl::MAX_BUF_SIZE) {
-                        let chunk = OutboundFrame::Body(
-                            Bytes::copy_from_slice(chunk),
-                            false,
-                        );
+                        let chunk = OutboundFrame::Body(Bytes::copy_from_slice(chunk), false);
                         frame_sender.send(chunk).await.ok()?;
                     }
-                },
+                }
                 Err(error) => {
                     log::error!("Received error when sending or receiving HTTP body: {error:?}");
 
@@ -103,14 +99,11 @@ impl ExampleBody {
                     frame_sender.send(fin_chunk).await.ok()?;
 
                     return None;
-                },
+                }
             }
         }
 
-        frame_sender
-            .send(OutboundFrame::Body(Default::default(), true))
-            .await
-            .ok()?;
+        frame_sender.send(OutboundFrame::Body(Default::default(), true)).await.ok()?;
 
         Some(())
     }
@@ -121,7 +114,8 @@ impl Body for ExampleBody {
     type Error = Box<dyn std::error::Error + Send + Sync>;
 
     fn poll_frame(
-        mut self: Pin<&mut Self>, _cx: &mut Context<'_>,
+        mut self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
         Poll::Ready(match self.remaining {
             0 => None,
@@ -133,7 +127,7 @@ impl Body for ExampleBody {
 
                 // Borrowing the slice of data and avoid copy.
                 Some(Ok(Frame::data(self.chunk.slice(..chunk_len))))
-            },
+            }
         })
     }
 

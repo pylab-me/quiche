@@ -26,19 +26,25 @@
 
 #[cfg(target_os = "linux")]
 mod linux_imports {
-    pub use libc::c_int;
-    pub use libc::c_void;
-    pub use libc::sock_txtime;
-    pub use libc::socklen_t;
+    pub use std::io;
+    pub use std::os::fd::AsFd;
+    pub use std::os::fd::AsRawFd;
+    pub use std::os::fd::BorrowedFd;
+
+    pub use libc::IP_MTU_DISCOVER;
+    pub use libc::IP_PMTUDISC_PROBE;
     pub use libc::IPPROTO_IP;
     pub use libc::IPPROTO_IPV6;
     pub use libc::IPV6_MTU_DISCOVER;
     pub use libc::IPV6_PMTUDISC_PROBE;
-    pub use libc::IP_MTU_DISCOVER;
-    pub use libc::IP_PMTUDISC_PROBE;
-    pub use libc::SOL_SOCKET;
     pub use libc::SO_RCVMARK;
+    pub use libc::SOL_SOCKET;
+    pub use libc::c_int;
+    pub use libc::c_void;
+    pub use libc::sock_txtime;
+    pub use libc::socklen_t;
     pub use nix::errno::Errno;
+    pub use nix::sys::socket::SetSockOpt;
     pub use nix::sys::socket::getsockopt;
     pub use nix::sys::socket::setsockopt;
     pub use nix::sys::socket::sockopt::IpFreebind;
@@ -53,11 +59,6 @@ mod linux_imports {
     pub use nix::sys::socket::sockopt::TxTime;
     pub use nix::sys::socket::sockopt::UdpGroSegment;
     pub use nix::sys::socket::sockopt::UdpGsoSegment;
-    pub use nix::sys::socket::SetSockOpt;
-    pub use std::io;
-    pub use std::os::fd::AsFd;
-    pub use std::os::fd::AsRawFd;
-    pub use std::os::fd::BorrowedFd;
 }
 
 #[cfg(target_os = "linux")]
@@ -298,8 +299,8 @@ impl<'s> SocketCapabilitiesBuilder<'s> {
     /// will only check their status. **If neither of them is enabled, the
     /// `PKTINFO` sockopts will cause errors when sending packets.**
     pub fn allows_nonlocal_source(&self) -> io::Result<bool> {
-        Ok(getsockopt(&self.socket.as_fd(), IpFreebind)? ||
-            getsockopt(&self.socket.as_fd(), IpTransparent)?)
+        Ok(getsockopt(&self.socket.as_fd(), IpFreebind)?
+            || getsockopt(&self.socket.as_fd(), IpTransparent)?)
     }
 
     pub fn rcvmark(&mut self) -> io::Result<()> {

@@ -32,24 +32,23 @@ use std::time::Instant;
 use datagram_socket::DatagramSocketSend;
 use datagram_socket::DatagramSocketSendExt;
 use datagram_socket::MAX_DATAGRAM_SIZE;
+use qlog::writer::QlogCompression;
 use qlog::writer::make_qlog_writer_from_path;
 use qlog::writer::qlog_file_name;
-use qlog::writer::QlogCompression;
 use quiche::ConnectionId;
 use quiche::Header;
 use quiche::RetryConnectionIds;
 use quiche::Type as PacketType;
 use task_killswitch::spawn_with_killswitch;
 
-use crate::metrics::labels;
+use super::InitialPacketHandler;
+use crate::QuicResultExt;
 use crate::metrics::Metrics;
+use crate::metrics::labels;
+use crate::quic::Incoming;
 use crate::quic::addr_validation_token::AddrValidationTokenManager;
 use crate::quic::connection::SharedConnectionIdGenerator;
 use crate::quic::router::NewConnection;
-use crate::quic::Incoming;
-use crate::QuicResultExt;
-
-use super::InitialPacketHandler;
 
 /// A [`ConnectionAcceptor`] is an [`InitialPacketHandler`] that acts as a
 /// server and accepts quic connections.
@@ -76,9 +75,11 @@ where
     M: Metrics,
 {
     pub(crate) fn new(
-        config: ConnectionAcceptorConfig, socket: Arc<S>,
+        config: ConnectionAcceptorConfig,
+        socket: Arc<S>,
         token_manager: AddrValidationTokenManager,
-        cid_generator: SharedConnectionIdGenerator, metrics: M,
+        cid_generator: SharedConnectionIdGenerator,
+        metrics: M,
     ) -> Self {
         Self {
             config,
@@ -90,8 +91,11 @@ where
     }
 
     fn accept_conn(
-        &mut self, incoming: Incoming, retry_cids: Option<RetryConnectionIds>,
-        pending_cid: ConnectionId<'static>, quiche_config: &mut quiche::Config,
+        &mut self,
+        incoming: Incoming,
+        retry_cids: Option<RetryConnectionIds>,
+        pending_cid: ConnectionId<'static>,
+        quiche_config: &mut quiche::Config,
     ) -> io::Result<Option<NewConnection>> {
         let handshake_start_time = Instant::now();
         let scid = self.cid_generator.new_connection_id();
@@ -119,9 +123,7 @@ where
             let id = format!("{:?}", scid);
             let path = std::path::Path::new(qlog_dir)
                 .join(qlog_file_name(&id, self.config.qlog_compression));
-            if let Ok(writer) =
-                make_qlog_writer_from_path(&path, self.config.qlog_compression)
-            {
+            if let Ok(writer) = make_qlog_writer_from_path(&path, self.config.qlog_compression) {
                 conn.set_qlog(
                     writer,
                     "tokio-quiche qlog".to_string(),
@@ -146,7 +148,8 @@ where
     }
 
     fn handshake_reply(
-        &self, incoming: Incoming,
+        &self,
+        incoming: Incoming,
         writer: impl FnOnce(&mut [u8]) -> io::Result<usize>,
     ) -> io::Result<Option<NewConnection>> {
         let mut send_buf = [0u8; MAX_DATAGRAM_SIZE];
@@ -155,12 +158,9 @@ where
         #[cfg(target_os = "linux")]
         let with_pktinfo = self.config.with_pktinfo;
         #[cfg(target_os = "linux")]
-        let would_block_metric = self
-            .metrics
-            .write_errors(labels::QuicWriteError::WouldBlock);
+        let would_block_metric = self.metrics.write_errors(labels::QuicWriteError::WouldBlock);
         #[cfg(target_os = "linux")]
-        let send_to_wouldblock_duration_s =
-            self.metrics.send_to_wouldblock_duration_s();
+        let send_to_wouldblock_duration_s = self.metrics.send_to_wouldblock_duration_s();
 
         spawn_with_killswitch(async move {
             let send_buf = &send_buf[..written];
@@ -196,15 +196,16 @@ where
     }
 
     fn stateless_retry(
-        &mut self, incoming: Incoming, hdr: Header,
+        &mut self,
+        incoming: Incoming,
+        hdr: Header,
     ) -> io::Result<Option<NewConnection>> {
         let scid = self.cid_generator.new_connection_id();
 
         let token = self.token_manager.gen(&hdr.dcid, incoming.peer_addr);
 
         self.handshake_reply(incoming, move |buf| {
-            quiche::retry(&hdr.scid, &hdr.dcid, &scid, &token, hdr.version, buf)
-                .into_io()
+            quiche::retry(&hdr.scid, &hdr.dcid, &scid, &token, hdr.version, buf).into_io()
         })
     }
 }
@@ -215,7 +216,9 @@ where
     M: Metrics,
 {
     fn handle_initials(
-        &mut self, incoming: Incoming, hdr: quiche::Header<'static>,
+        &mut self,
+        incoming: Incoming,
+        hdr: quiche::Header<'static>,
         quiche_config: &mut quiche::Config,
     ) -> io::Result<Option<NewConnection>> {
         if hdr.ty != PacketType::Initial {

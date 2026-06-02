@@ -15,10 +15,8 @@ use quiche::h3::Header;
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::oneshot;
 
+use crate::ApplicationOverQuic as _;
 use crate::buf_factory::BufFactory;
-use crate::http3::driver::client::ClientHooks;
-use crate::http3::driver::hooks::DriverHooks;
-use crate::http3::driver::server::ServerHooks;
 use crate::http3::driver::ClientH3Event;
 use crate::http3::driver::H3Controller;
 use crate::http3::driver::H3Driver;
@@ -28,23 +26,21 @@ use crate::http3::driver::InboundFrameStream;
 use crate::http3::driver::NewClientRequest;
 use crate::http3::driver::OutboundFrameSender;
 use crate::http3::driver::ServerH3Event;
+use crate::http3::driver::client::ClientHooks;
+use crate::http3::driver::hooks::DriverHooks;
+use crate::http3::driver::server::ServerHooks;
 use crate::http3::settings::Http3Settings;
-use crate::metrics::labels;
 use crate::metrics::Metrics;
+use crate::metrics::labels;
 use crate::quic::HandshakeInfo;
 use crate::quic::QuicheConnection;
-use crate::ApplicationOverQuic as _;
 
 type Pipe = quiche::test_utils::Pipe<BufFactory>;
 
 pub fn default_quiche_config() -> quiche::Config {
     let mut config = quiche::Config::new(quiche::PROTOCOL_VERSION).unwrap();
-    config
-        .load_cert_chain_from_pem_file("examples/cert.crt")
-        .unwrap();
-    config
-        .load_priv_key_from_pem_file("examples/cert.key")
-        .unwrap();
+    config.load_cert_chain_from_pem_file("examples/cert.crt").unwrap();
+    config.load_priv_key_from_pem_file("examples/cert.key").unwrap();
     config.set_application_protos(&[b"h3"]).unwrap();
     config.set_initial_max_data(1500);
     config.set_initial_max_stream_data_bidi_local(150);
@@ -66,10 +62,7 @@ pub fn make_request_headers(method: &str) -> Vec<Header> {
 }
 
 pub fn make_response_headers() -> Vec<Header> {
-    vec![
-        Header::new(b":status", b"200"),
-        Header::new(b"server", b"quiche-test"),
-    ]
+    vec![Header::new(b":status", b"200"), Header::new(b"server", b"quiche-test")]
 }
 
 pub fn make_response_trailers() -> Vec<Header> {
@@ -129,15 +122,14 @@ impl<H: DriverHooks + GetConnectionForHook> DriverTestHelper<H> {
     }
 
     pub fn with_pipe_and_http3_settings(
-        mut pipe: Pipe, h3_settings: Http3Settings,
+        mut pipe: Pipe,
+        h3_settings: Http3Settings,
     ) -> anyhow::Result<Self> {
         pipe.handshake().context("Failed to handshake pipe")?;
         let (driver, controller) = H3Driver::<H>::new(h3_settings);
-        let peer = h3::Connection::with_transport(
-            H::peer_qconn(&mut pipe),
-            &h3::Config::new().unwrap(),
-        )
-        .context("create H3 peer connection")?;
+        let peer =
+            h3::Connection::with_transport(H::peer_qconn(&mut pipe), &h3::Config::new().unwrap())
+                .context("create H3 peer connection")?;
         Ok(Self {
             pipe,
             driver,
@@ -227,25 +219,16 @@ impl<H: DriverHooks + GetConnectionForHook> DriverTestHelper<H> {
     }
 
     /// Send a body from the peer
-    fn peer_send_body(
-        &mut self, stream_id: u64, body: &[u8], fin: bool,
-    ) -> h3::Result<usize> {
-        self.peer
-            .send_body(H::peer_qconn(&mut self.pipe), stream_id, body, fin)
+    fn peer_send_body(&mut self, stream_id: u64, body: &[u8], fin: bool) -> h3::Result<usize> {
+        self.peer.send_body(H::peer_qconn(&mut self.pipe), stream_id, body, fin)
     }
 
     /// Call `h3::Connection::recv_body()` on the peer and read at most
     /// `max_read` bytes into a Vector, returns the Vec.
-    fn peer_recv_body_vec(
-        &mut self, stream_id: u64, max_read: usize,
-    ) -> h3::Result<Vec<u8>> {
+    fn peer_recv_body_vec(&mut self, stream_id: u64, max_read: usize) -> h3::Result<Vec<u8>> {
         let mut buf = vec![0; max_read];
 
-        let written = self.peer.recv_body(
-            H::peer_qconn(&mut self.pipe),
-            stream_id,
-            &mut buf,
-        )?;
+        let written = self.peer.recv_body(H::peer_qconn(&mut self.pipe), stream_id, &mut buf)?;
         buf.truncate(written);
         Ok(buf)
     }
@@ -254,7 +237,8 @@ impl<H: DriverHooks + GetConnectionForHook> DriverTestHelper<H> {
     /// until the receiver returns an empty or disconnected.
     /// Merges all received parts into a single Vec.
     pub fn driver_try_recv_body(
-        &mut self, recv: &mut InboundFrameStream,
+        &mut self,
+        recv: &mut InboundFrameStream,
     ) -> (Vec<u8>, bool, TryRecvError) {
         let mut buf = Vec::new();
         let mut had_fin = false;
@@ -266,10 +250,10 @@ impl<H: DriverHooks + GetConnectionForHook> DriverTestHelper<H> {
                     }
                     buf.extend_from_slice(&pooled);
                     had_fin = fin;
-                },
+                }
                 Ok(InboundFrame::Datagram(..)) => {
                     panic!("Unexepected InboundFrame::Datagram");
-                },
+                }
                 Err(err) => return (buf, had_fin, err),
             }
             self.work_loop_iter().unwrap();
@@ -288,9 +272,7 @@ impl DriverTestHelper<ClientHooks> {
     ///
     /// This function assumes that there are no commands or events queued
     /// when called.
-    pub fn driver_send_request(
-        &mut self, headers: Vec<Header>, fin: bool,
-    ) -> anyhow::Result<u64> {
+    pub fn driver_send_request(&mut self, headers: Vec<Header>, fin: bool) -> anyhow::Result<u64> {
         let body_writer_oneshot_tx = if fin {
             None
         } else {
@@ -313,7 +295,9 @@ impl DriverTestHelper<ClientHooks> {
 
     /// enqueue a `NewClientRequest` command
     pub fn driver_enqueue_request(
-        &mut self, request_id: u64, headers: Vec<Header>,
+        &mut self,
+        request_id: u64,
+        headers: Vec<Header>,
         body_writer: Option<oneshot::Sender<OutboundFrameSender>>,
     ) {
         self.controller
@@ -343,16 +327,10 @@ impl DriverTestHelper<ClientHooks> {
     /// Sends a response from server with default headers.
     ///
     /// On success it returns the headers.
-    pub fn peer_server_send_response(
-        &mut self, stream: u64, fin: bool,
-    ) -> h3::Result<Vec<Header>> {
-        let resp = vec![
-            Header::new(b":status", b"200"),
-            Header::new(b"server", b"quiche-test"),
-        ];
+    pub fn peer_server_send_response(&mut self, stream: u64, fin: bool) -> h3::Result<Vec<Header>> {
+        let resp = vec![Header::new(b":status", b"200"), Header::new(b"server", b"quiche-test")];
 
-        self.peer
-            .send_response(&mut self.pipe.server, stream, &resp, fin)?;
+        self.peer.send_response(&mut self.pipe.server, stream, &resp, fin)?;
 
         Ok(resp)
     }
@@ -363,7 +341,10 @@ impl DriverTestHelper<ClientHooks> {
 
     /// Send a body from the server
     pub fn peer_server_send_body(
-        &mut self, stream_id: u64, body: &[u8], fin: bool,
+        &mut self,
+        stream_id: u64,
+        body: &[u8],
+        fin: bool,
     ) -> h3::Result<usize> {
         self.peer_send_body(stream_id, body, fin)
     }
@@ -371,7 +352,9 @@ impl DriverTestHelper<ClientHooks> {
     /// Receive at most `max_read` body bytes and return the read
     /// bytes as a `Vec`
     pub fn peer_server_recv_body_vec(
-        &mut self, stream_id: u64, max_read: usize,
+        &mut self,
+        stream_id: u64,
+        max_read: usize,
     ) -> h3::Result<Vec<u8>> {
         self.peer_recv_body_vec(stream_id, max_read)
     }
@@ -380,11 +363,11 @@ impl DriverTestHelper<ClientHooks> {
 impl DriverTestHelper<ServerHooks> {
     /// Sends a new client request
     pub fn peer_client_send_request(
-        &mut self, headers: Vec<Header>, fin: bool,
+        &mut self,
+        headers: Vec<Header>,
+        fin: bool,
     ) -> anyhow::Result<u64> {
-        Ok(self
-            .peer
-            .send_request(&mut self.pipe.client, &headers, fin)?)
+        Ok(self.peer.send_request(&mut self.pipe.client, &headers, fin)?)
     }
 
     /// Try to receive an event from the controller, returns an error if
@@ -407,7 +390,10 @@ impl DriverTestHelper<ServerHooks> {
 
     /// Send a body from the server
     pub fn peer_client_send_body(
-        &mut self, stream_id: u64, body: &[u8], fin: bool,
+        &mut self,
+        stream_id: u64,
+        body: &[u8],
+        fin: bool,
     ) -> h3::Result<usize> {
         self.peer_send_body(stream_id, body, fin)
     }
@@ -415,7 +401,9 @@ impl DriverTestHelper<ServerHooks> {
     /// Receive at most `max_read` body bytes and return the read
     /// bytes as a `Vec`
     pub fn peer_client_recv_body_vec(
-        &mut self, stream_id: u64, max_read: usize,
+        &mut self,
+        stream_id: u64,
+        max_read: usize,
     ) -> h3::Result<Vec<u8>> {
         self.peer_recv_body_vec(stream_id, max_read)
     }
@@ -432,27 +420,19 @@ pub struct TestMetrics {
 }
 
 impl Metrics for TestMetrics {
-    fn local_h3_conn_close_error_count(
-        &self, _reason: labels::H3Error,
-    ) -> Counter {
+    fn local_h3_conn_close_error_count(&self, _reason: labels::H3Error) -> Counter {
         self.local_h3.clone()
     }
 
-    fn local_quic_conn_close_error_count(
-        &self, _reason: labels::QuicError,
-    ) -> Counter {
+    fn local_quic_conn_close_error_count(&self, _reason: labels::QuicError) -> Counter {
         self.local_quic.clone()
     }
 
-    fn peer_h3_conn_close_error_count(
-        &self, _reason: labels::H3Error,
-    ) -> Counter {
+    fn peer_h3_conn_close_error_count(&self, _reason: labels::H3Error) -> Counter {
         self.peer_h3.clone()
     }
 
-    fn peer_quic_conn_close_error_count(
-        &self, _reason: labels::QuicError,
-    ) -> Counter {
+    fn peer_quic_conn_close_error_count(&self, _reason: labels::QuicError) -> Counter {
         self.peer_quic.clone()
     }
 
@@ -466,9 +446,7 @@ impl Metrics for TestMetrics {
         Histogram::new(std::iter::empty())
     }
 
-    fn handshake_time_seconds(
-        &self, _: labels::QuicHandshakeStage,
-    ) -> TimeHistogram {
+    fn handshake_time_seconds(&self, _: labels::QuicHandshakeStage) -> TimeHistogram {
         TimeHistogram::new(std::iter::empty())
     }
 
@@ -496,14 +474,14 @@ impl Metrics for TestMetrics {
         Counter::default()
     }
 
-    fn rejected_initial_packet_count(
-        &self, _: labels::QuicInvalidInitialPacketError,
-    ) -> Counter {
+    fn rejected_initial_packet_count(&self, _: labels::QuicInvalidInitialPacketError) -> Counter {
         Counter::default()
     }
 
     fn expensive_rejected_initial_packet_count(
-        &self, _: labels::QuicInvalidInitialPacketError, _: IpAddr,
+        &self,
+        _: labels::QuicInvalidInitialPacketError,
+        _: IpAddr,
     ) -> Counter {
         Counter::default()
     }
@@ -528,15 +506,11 @@ impl Metrics for TestMetrics {
         Counter::default()
     }
 
-    fn tokio_runtime_task_schedule_delay_histogram(
-        &self, _: &Arc<str>,
-    ) -> TimeHistogram {
+    fn tokio_runtime_task_schedule_delay_histogram(&self, _: &Arc<str>) -> TimeHistogram {
         TimeHistogram::new(std::iter::empty())
     }
 
-    fn tokio_runtime_task_poll_duration_histogram(
-        &self, _: &Arc<str>,
-    ) -> TimeHistogram {
+    fn tokio_runtime_task_poll_duration_histogram(&self, _: &Arc<str>) -> TimeHistogram {
         TimeHistogram::new(std::iter::empty())
     }
 
