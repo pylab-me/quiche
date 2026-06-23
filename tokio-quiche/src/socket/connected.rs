@@ -24,11 +24,12 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use datagram_socket::DatagramSocketRecv;
-use datagram_socket::DatagramSocketSend;
 use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
+
+use datagram_socket::DatagramSocketRecv;
+use datagram_socket::DatagramSocketSend;
 use tokio::net::UdpSocket;
 
 use super::SocketCapabilities;
@@ -67,9 +68,7 @@ pub type BoxedSocket = Socket<
 impl<Tx, Rx> Socket<Tx, Rx> {
     /// Creates a [`Socket`] from a [`UdpSocket`] by wrapping the file
     /// descriptor in an [`Arc`].
-    pub fn from_udp(
-        socket: UdpSocket,
-    ) -> io::Result<Socket<Arc<UdpSocket>, Arc<UdpSocket>>> {
+    pub fn from_udp(socket: UdpSocket) -> io::Result<Socket<Arc<UdpSocket>, Arc<UdpSocket>>> {
         let local_addr = socket.local_addr()?;
         let peer_addr = socket.peer_addr()?;
 
@@ -118,8 +117,7 @@ where
             return;
         };
 
-        let capabilities =
-            SocketCapabilities::apply_all_and_get_compatibility(socket);
+        let capabilities = SocketCapabilities::apply_all_and_get_compatibility(socket);
         self.capabilities = capabilities;
     }
 }

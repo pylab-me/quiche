@@ -162,44 +162,34 @@ impl H3AuditStats {
 
     #[inline]
     pub fn add_downstream_bytes_sent(&self, bytes_sent: u64) {
-        self.downstream_bytes_sent
-            .fetch_add(bytes_sent, Ordering::SeqCst);
+        self.downstream_bytes_sent.fetch_add(bytes_sent, Ordering::SeqCst);
     }
 
     #[inline]
     pub fn add_downstream_bytes_recvd(&self, bytes_recvd: u64) {
-        self.downstream_bytes_recvd
-            .fetch_add(bytes_recvd, Ordering::SeqCst);
+        self.downstream_bytes_recvd.fetch_add(bytes_recvd, Ordering::SeqCst);
     }
 
     #[inline]
-    pub fn set_recvd_stop_sending_error_code(
-        &self, recvd_stop_sending_error_code: i64,
-    ) {
+    pub fn set_recvd_stop_sending_error_code(&self, recvd_stop_sending_error_code: i64) {
         self.recvd_stop_sending_error_code
             .store(recvd_stop_sending_error_code, Ordering::SeqCst);
     }
 
     #[inline]
-    pub fn set_recvd_reset_stream_error_code(
-        &self, recvd_reset_stream_error_code: i64,
-    ) {
+    pub fn set_recvd_reset_stream_error_code(&self, recvd_reset_stream_error_code: i64) {
         self.recvd_reset_stream_error_code
             .store(recvd_reset_stream_error_code, Ordering::SeqCst);
     }
 
     #[inline]
-    pub fn set_sent_stop_sending_error_code(
-        &self, sent_stop_sending_error_code: i64,
-    ) {
+    pub fn set_sent_stop_sending_error_code(&self, sent_stop_sending_error_code: i64) {
         self.sent_stop_sending_error_code
             .store(sent_stop_sending_error_code, Ordering::SeqCst);
     }
 
     #[inline]
-    pub fn set_sent_reset_stream_error_code(
-        &self, sent_reset_stream_error_code: i64,
-    ) {
+    pub fn set_sent_reset_stream_error_code(&self, sent_reset_stream_error_code: i64) {
         self.sent_reset_stream_error_code
             .store(sent_reset_stream_error_code, Ordering::SeqCst);
     }

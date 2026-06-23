@@ -24,21 +24,22 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use crate::fixtures::*;
-use h3i_fixtures::received_status_code_on_stream;
+use std::time::Duration;
 
-use foundations::telemetry::with_test_telemetry;
 use foundations::telemetry::TestTelemetryContext;
+use foundations::telemetry::with_test_telemetry;
 use futures::StreamExt;
 use futures_util::future::try_join_all;
-use std::time::Duration;
+use h3i_fixtures::received_status_code_on_stream;
 use tokio::time::timeout;
+use tokio_quiche::ConnectionParams;
+use tokio_quiche::InitialQuicConnection;
 use tokio_quiche::listen;
 use tokio_quiche::metrics::DefaultMetrics;
 use tokio_quiche::settings::Hooks;
 use tokio_quiche::settings::TlsCertificatePaths;
-use tokio_quiche::ConnectionParams;
-use tokio_quiche::InitialQuicConnection;
+
+use crate::fixtures::*;
 
 pub mod async_callbacks;
 pub mod connection_close;
@@ -145,11 +146,11 @@ async fn quiche_logs_forwarded_server_side(cx: TestTelemetryContext) {
     // Unfortunately, the Foundations `fields` struct is empty for some reason.
     // This is a bit of a hacky test, but it checks for a string that should
     // come from Quiche's Trace logs
-    assert!(cx.log_records().iter().any(|record| (record
-        .message
-        .contains("rx pkt") ||
-        record.message.contains("tx pkt")) &&
-        record.level.as_str() == "TRACE"));
+    assert!(
+        cx.log_records().iter().any(|record| (record.message.contains("rx pkt")
+            || record.message.contains("tx pkt"))
+            && record.level.as_str() == "TRACE")
+    );
 }
 
 #[tokio::test]
@@ -167,19 +168,12 @@ async fn test_ioworker_state_machine_pause() {
         connection_hook: Some(TestConnectionHook::new()),
     };
 
-    let params = ConnectionParams::new_server(
-        QuicSettings::default(),
-        tls_cert_settings,
-        hooks,
-    );
-    let mut stream = listen(vec![socket], params, DefaultMetrics)
-        .unwrap()
-        .remove(0);
+    let params = ConnectionParams::new_server(QuicSettings::default(), tls_cert_settings, hooks);
+    let mut stream = listen(vec![socket], params, DefaultMetrics).unwrap().remove(0);
 
     tokio::spawn(async move {
         loop {
-            let (h3_driver, h3_controller) =
-                ServerH3Driver::new(Http3Settings::default());
+            let (h3_driver, h3_controller) = ServerH3Driver::new(Http3Settings::default());
             let conn = stream.next().await.unwrap().unwrap();
 
             let (quic_connection, worker) =
@@ -187,8 +181,7 @@ async fn test_ioworker_state_machine_pause() {
 
             InitialQuicConnection::resume(worker);
 
-            let h3_over_quic =
-                ServerH3Connection::new(quic_connection, h3_controller);
+            let h3_over_quic = ServerH3Connection::new(quic_connection, h3_controller);
             tokio::spawn(async move {
                 handle_connection(h3_over_quic).await;
             });
@@ -207,11 +200,11 @@ async fn test_ioworker_state_machine_pause() {
 #[tokio::test]
 #[cfg(feature = "custom-client-dcid")]
 async fn test_connect_with_custom_dcid() {
+    use tokio_quiche::ClientH3Driver;
+    use tokio_quiche::ConnectionIdGenerator;
     use tokio_quiche::http3::settings::Http3Settings;
     use tokio_quiche::quic::connect_with_config;
     use tokio_quiche::socket::Socket;
-    use tokio_quiche::ClientH3Driver;
-    use tokio_quiche::ConnectionIdGenerator;
 
     let (url, _hook, _audit_stats_rx) = start_server();
     let addr = extract_host_ipv4(&url);
@@ -219,20 +212,20 @@ async fn test_connect_with_custom_dcid() {
     let tokio_socket = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
     tokio_socket.connect(addr).await.unwrap();
     let socket = Socket::try_from(tokio_socket).unwrap();
-    let (h3_driver, _h3_controller) =
-        ClientH3Driver::new(Http3Settings::default());
-    let dcid =
-        tokio_quiche::quic::SimpleConnectionIdGenerator.new_connection_id();
+    let (h3_driver, _h3_controller) = ClientH3Driver::new(Http3Settings::default());
+    let dcid = tokio_quiche::quic::SimpleConnectionIdGenerator.new_connection_id();
     let mut params = ConnectionParams::default();
     params.dcid = Some(dcid);
 
-    assert!(timeout(
-        Duration::from_secs(5),
-        connect_with_config(socket, Some("127.0.0.1"), &params, h3_driver,),
-    )
-    .await
-    .expect("connection timed out")
-    .is_ok());
+    assert!(
+        timeout(
+            Duration::from_secs(5),
+            connect_with_config(socket, Some("127.0.0.1"), &params, h3_driver,),
+        )
+        .await
+        .expect("connection timed out")
+        .is_ok()
+    );
 }
 
 #[tokio::test]

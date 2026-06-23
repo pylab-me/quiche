@@ -24,22 +24,22 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use crate::body::ExampleBody;
+use std::sync::Arc;
+
 use futures_util::Future;
 use futures_util::SinkExt;
-use http::request;
-use http::uri::PathAndQuery;
-use http::uri::{
-    self,
-};
 use http::HeaderName;
 use http::HeaderValue;
 use http::Request;
 use http::Response;
 use http::Uri;
+use http::request;
+use http::uri::PathAndQuery;
+use http::uri::{self};
 use quiche::h3::Header;
 use quiche::h3::NameValue;
-use std::sync::Arc;
+use tokio_quiche::BoxError;
+use tokio_quiche::QuicResult;
 use tokio_quiche::http3::driver::H3Event;
 use tokio_quiche::http3::driver::IncomingH3Headers;
 use tokio_quiche::http3::driver::OutboundFrame;
@@ -47,8 +47,8 @@ use tokio_quiche::http3::driver::OutboundFrameSender;
 use tokio_quiche::http3::driver::RawPriorityValue;
 use tokio_quiche::http3::driver::ServerEventStream;
 use tokio_quiche::http3::driver::ServerH3Event;
-use tokio_quiche::BoxError;
-use tokio_quiche::QuicResult;
+
+use crate::body::ExampleBody;
 
 /// A simple [service function].
 ///
@@ -99,7 +99,8 @@ where
     /// tokio-quiche's `H3Driver` emits these events in response to data that
     /// comes off the underlying socket.
     pub async fn serve_connection(
-        &mut self, h3_event_receiver: &mut ServerEventStream,
+        &mut self,
+        h3_event_receiver: &mut ServerEventStream,
     ) -> QuicResult<()> {
         loop {
             match h3_event_receiver.recv().await {
@@ -126,21 +127,19 @@ where
                 };
 
                 QuicResult::Err(err)
-            },
+            }
 
             _ => {
                 log::info!("received unhandled event: {event:?}");
                 Ok(())
-            },
+            }
         }
     }
 
     /// Handle a [`ServerH3Event`].
     ///
     /// TODO(evanrittenhouse): support POST requests
-    async fn handle_server_h3_event(
-        &mut self, event: ServerH3Event,
-    ) -> QuicResult<()> {
+    async fn handle_server_h3_event(&mut self, event: ServerH3Event) -> QuicResult<()> {
         match event {
             ServerH3Event::Core(event) => Self::handle_h3_event(event),
 
@@ -150,10 +149,9 @@ where
                 is_in_early_data: _,
             } => {
                 // Received headers for a new stream from the H3Driver.
-                self.handle_incoming_headers(incoming_headers, priority)
-                    .await;
+                self.handle_incoming_headers(incoming_headers, priority).await;
                 Ok(())
-            },
+            }
         }
     }
 
@@ -163,7 +161,8 @@ where
     /// creating the proper response body if requested. It then spawns a
     /// Tokio task which calls the `service_fn` on the [`Request`].
     async fn handle_incoming_headers(
-        &mut self, headers: IncomingH3Headers,
+        &mut self,
+        headers: IncomingH3Headers,
         _priority: Option<RawPriorityValue>,
     ) {
         log::info!("received headers: {:?}", &headers);
@@ -195,7 +194,8 @@ where
     /// The `frame_sender` parameter connects back to tokio-quiche `H3Driver`,
     /// which communicates the data back to quiche.
     async fn handle_request(
-        service_fn: Arc<S>, req: Request<()>,
+        service_fn: Arc<S>,
+        req: Request<()>,
         mut frame_sender: OutboundFrameSender,
     ) {
         let res = service_fn(req).await;
@@ -203,9 +203,7 @@ where
         // Convert the result of the `service_fn` into headers and a body which
         // can be transmitted to tokio-quiche.
         let (h3_headers, body) = convert_response(res);
-        let _ = frame_sender
-            .send(OutboundFrame::Headers(h3_headers, None))
-            .await;
+        let _ = frame_sender.send(OutboundFrame::Headers(h3_headers, None)).await;
 
         body.send(frame_sender).await;
     }
@@ -224,9 +222,7 @@ where
 /// This serves as an example, and does not ensure HTTP semantics by any means.
 /// For example, this will not ensure that required pseudo-headers are present,
 /// nor will it detect duplicate pseudo-headers.
-fn convert_headers(
-    headers: Vec<Header>,
-) -> QuicResult<(uri::Builder, request::Builder)> {
+fn convert_headers(headers: Vec<Header>) -> QuicResult<(uri::Builder, request::Builder)> {
     let mut req_builder = Request::builder();
     let mut uri_builder = Uri::builder();
 
@@ -234,11 +230,7 @@ fn convert_headers(
         let name = header.name();
         let value = header.value();
 
-        let Some(first) = name
-            .iter()
-            .next()
-            .and_then(|f| std::char::from_u32(*f as u32))
-        else {
+        let Some(first) = name.iter().next().and_then(|f| std::char::from_u32(*f as u32)) else {
             log::warn!("received header with no or invalid first character");
             continue;
         };
@@ -247,22 +239,22 @@ fn convert_headers(
             match name {
                 b":method" => {
                     req_builder = req_builder.method(value);
-                },
+                }
                 b":scheme" => {
                     uri_builder = uri_builder.scheme(value);
-                },
+                }
                 b":authority" => {
                     let host = HeaderValue::from_bytes(value)?;
                     uri_builder = uri_builder.authority(host.as_bytes());
                     req_builder.headers_mut().map(|h| h.insert("host", host));
-                },
+                }
                 b":path" => {
                     let path = PathAndQuery::try_from(value)?;
                     uri_builder = uri_builder.path_and_query(path);
-                },
+                }
                 _ => {
                     log::warn!("received unknown pseudo-header: {name:?}");
-                },
+                }
             }
         } else {
             req_builder.headers_mut().map(|h| {
@@ -279,8 +271,7 @@ fn convert_headers(
 
 /// Convert a [`Response`] into headers and a body, readable by tokio-quiche.
 fn convert_response<B>(res: Response<B>) -> (Vec<Header>, B) {
-    let mut h3_headers =
-        vec![Header::new(b":status", res.status().as_str().as_bytes())];
+    let mut h3_headers = vec![Header::new(b":status", res.status().as_str().as_bytes())];
 
     for (name, value) in res.headers().iter() {
         h3_headers.push(Header::new(name.as_ref(), value.as_bytes()));

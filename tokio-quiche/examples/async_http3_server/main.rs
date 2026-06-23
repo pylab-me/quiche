@@ -28,23 +28,22 @@ mod args;
 mod body;
 mod server;
 
-use crate::args::Args;
-use crate::server::service_fn;
-use crate::server::Server;
 use clap::Parser;
 use futures::stream::StreamExt;
 use tokio::net::UdpSocket;
+use tokio_quiche::ConnectionParams;
+use tokio_quiche::ServerH3Driver;
 use tokio_quiche::http3::settings::Http3Settings;
 use tokio_quiche::listen;
 use tokio_quiche::metrics::DefaultMetrics;
-use tokio_quiche::settings::CertificateKind::{
-    self,
-};
+use tokio_quiche::settings::CertificateKind::{self};
 use tokio_quiche::settings::Hooks;
 use tokio_quiche::settings::QuicSettings;
 use tokio_quiche::settings::TlsCertificatePaths;
-use tokio_quiche::ConnectionParams;
-use tokio_quiche::ServerH3Driver;
+
+use crate::args::Args;
+use crate::server::Server;
+use crate::server::service_fn;
 
 #[tokio::main]
 async fn main() {
@@ -53,17 +52,14 @@ async fn main() {
     // Create listening socket. Note that we use `ConnectionParams::new_server()`
     // to denote that we're creating a server.
     let args = Args::parse();
-    let socket = UdpSocket::bind(&args.address)
-        .await
-        .expect("UDP socket should be bindable");
+    let socket = UdpSocket::bind(&args.address).await.expect("UDP socket should be bindable");
     let mut quic_settings = QuicSettings::default();
     quic_settings.qlog_dir = std::env::var("QLOGDIR").ok();
     quic_settings.cc_algorithm = args.cc_algorithm.clone();
     quic_settings.initial_congestion_window_packets = args.initial_cwnd_packets;
     quic_settings.enable_hystart = !args.disable_hystart;
     quic_settings.enable_pacing = args.enable_pacing;
-    quic_settings.max_pacing_rate =
-        (args.max_pacing_rate > 0).then_some(args.max_pacing_rate);
+    quic_settings.max_pacing_rate = (args.max_pacing_rate > 0).then_some(args.max_pacing_rate);
 
     let mut listeners = listen(
         [socket],
@@ -88,8 +84,7 @@ async fn main() {
                 log::info!("received new connection!");
 
                 // Create an `H3Driver` to serve the connection.
-                let (driver, mut controller) =
-                    ServerH3Driver::new(Http3Settings::default());
+                let (driver, mut controller) = ServerH3Driver::new(Http3Settings::default());
 
                 // Start the driver. This will execute the handshake under the
                 // hood, which lets us start receiving
@@ -103,14 +98,12 @@ async fn main() {
 
                     // tokio-quiche will send events to the `H3Controller`'s
                     // receiver for processing.
-                    let _ = server
-                        .serve_connection(controller.event_receiver_mut())
-                        .await;
+                    let _ = server.serve_connection(controller.event_receiver_mut()).await;
                 });
-            },
+            }
             Err(e) => {
                 log::error!("could not create connection: {e:?}");
-            },
+            }
         }
     }
 }

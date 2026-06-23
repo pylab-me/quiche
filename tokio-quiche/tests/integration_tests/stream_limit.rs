@@ -27,7 +27,14 @@
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use crate::fixtures::*;
+use h3i::actions::h3::Action;
+use h3i::actions::h3::ExpectedStreamSendResult;
+use h3i::actions::h3::RequiredStreamsQuota;
+use h3i::actions::h3::StreamEvent;
+use h3i::actions::h3::StreamEventType;
+use h3i::actions::h3::WaitType;
+use h3i::actions::h3::send_headers_frame;
+use h3i::actions::h3::send_headers_frame_with_expected_result;
 use h3i_fixtures::default_headers;
 use h3i_fixtures::h3i_config;
 use h3i_fixtures::received_status_code_on_stream;
@@ -35,14 +42,7 @@ use h3i_fixtures::summarize_connection;
 use tokio::sync::oneshot;
 use tokio_quiche::quic::QuicConnectionStats;
 
-use h3i::actions::h3::send_headers_frame;
-use h3i::actions::h3::send_headers_frame_with_expected_result;
-use h3i::actions::h3::Action;
-use h3i::actions::h3::ExpectedStreamSendResult;
-use h3i::actions::h3::RequiredStreamsQuota;
-use h3i::actions::h3::StreamEvent;
-use h3i::actions::h3::StreamEventType;
-use h3i::actions::h3::WaitType;
+use crate::fixtures::*;
 
 /// The server advertises a limit of 2 concurrent bidirectional streams.
 /// The client opens those 2 streams successfully, then attempts a third
@@ -57,8 +57,7 @@ async fn test_bidi_stream_limit_reached() -> QuicResult<()> {
     quic_settings.initial_max_streams_bidi = MAX_STREAMS;
 
     let hook = TestConnectionHook::new();
-    let (server_stats_tx, server_stats_rx) =
-        oneshot::channel::<Arc<Mutex<QuicConnectionStats>>>();
+    let (server_stats_tx, server_stats_rx) = oneshot::channel::<Arc<Mutex<QuicConnectionStats>>>();
     let server_stats_tx = Arc::new(Mutex::new(Some(server_stats_tx)));
     let (url, _audit_stats_rx) = start_server_with_settings(
         quic_settings,
@@ -102,10 +101,7 @@ async fn test_bidi_stream_limit_reached() -> QuicResult<()> {
     // MAX_STREAMS_BIDI frame that the client has received and applied.
     // peer_streams_left_bidi >= 1 is only true after all of that has happened.
     actions.push(Action::Wait {
-        wait_type: WaitType::CanOpenNumStreams(RequiredStreamsQuota {
-            num: 1,
-            bidi: true,
-        }),
+        wait_type: WaitType::CanOpenNumStreams(RequiredStreamsQuota { num: 1, bidi: true }),
     });
     // Attempt to create the stream that previously blocked. It should succeed
     // since the server sent a MAX_STREAMS update after streams 0 and 4 closed.
@@ -149,9 +145,8 @@ async fn test_bidi_stream_limit_reached() -> QuicResult<()> {
     // The client sent STREAMS_BLOCKED because we enabled
     // send_streams_blocked. Retrieve the server-side quiche::Stats and verify
     // that the server received exactly one STREAMS_BLOCKED (bidi) frame.
-    let server_stats_handle = server_stats_rx
-        .await
-        .expect("server should have sent its stats handle");
+    let server_stats_handle =
+        server_stats_rx.await.expect("server should have sent its stats handle");
     let server_stats = server_stats_handle.lock().unwrap();
 
     assert_eq!(

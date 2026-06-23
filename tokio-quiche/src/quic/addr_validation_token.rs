@@ -24,13 +24,12 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use quiche::ConnectionId;
 use std::io::Write;
-use std::io::{
-    self,
-};
+use std::io::{self};
 use std::net::IpAddr;
 use std::net::SocketAddr;
+
+use quiche::ConnectionId;
 
 use crate::QuicResultExt;
 
@@ -53,9 +52,7 @@ impl Default for AddrValidationTokenManager {
 }
 
 impl AddrValidationTokenManager {
-    pub(super) fn gen(
-        &self, original_dcid: &[u8], client_addr: SocketAddr,
-    ) -> Vec<u8> {
+    pub(super) fn gen(&self, original_dcid: &[u8], client_addr: SocketAddr) -> Vec<u8> {
         let ip_bytes = match client_addr.ip() {
             IpAddr::V4(addr) => addr.octets().to_vec(),
             IpAddr::V6(addr) => addr.octets().to_vec(),
@@ -68,11 +65,8 @@ impl AddrValidationTokenManager {
         token.write_all(&ip_bytes).unwrap();
         token.write_all(original_dcid).unwrap();
 
-        let tag = boring::hash::hmac_sha256(
-            &self.sign_key,
-            &token.get_ref()[HMAC_TAG_LEN..],
-        )
-        .unwrap();
+        let tag =
+            boring::hash::hmac_sha256(&self.sign_key, &token.get_ref()[HMAC_TAG_LEN..]).unwrap();
 
         token.set_position(0);
         token.write_all(tag.as_ref()).unwrap();
@@ -81,7 +75,9 @@ impl AddrValidationTokenManager {
     }
 
     pub(super) fn validate_and_extract_original_dcid<'t>(
-        &self, token: &'t [u8], client_addr: SocketAddr,
+        &self,
+        token: &'t [u8],
+        client_addr: SocketAddr,
     ) -> io::Result<ConnectionId<'t>> {
         let ip_bytes = match client_addr.ip() {
             IpAddr::V4(addr) => addr.octets().to_vec(),
@@ -96,8 +92,7 @@ impl AddrValidationTokenManager {
 
         let (tag, payload) = token.split_at(HMAC_TAG_LEN);
 
-        let expected_tag =
-            boring::hash::hmac_sha256(&self.sign_key, payload).unwrap();
+        let expected_tag = boring::hash::hmac_sha256(&self.sign_key, payload).unwrap();
 
         if !boring::memcmp::eq(&expected_tag, tag) {
             return Err("signature verification failed").into_io();
@@ -136,9 +131,10 @@ mod tests {
 
         assert_tag_generated(&token);
 
-        assert_eq!(token[HMAC_TAG_LEN..HMAC_TAG_LEN + 16], [
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1
-        ]);
+        assert_eq!(
+            token[HMAC_TAG_LEN..HMAC_TAG_LEN + 16],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
+        );
 
         assert_eq!(&token[HMAC_TAG_LEN + 16..], b"bar");
     }
@@ -151,9 +147,7 @@ mod tests {
         let token = manager.gen(b"foo", addr);
 
         assert_eq!(
-            manager
-                .validate_and_extract_original_dcid(&token, addr)
-                .unwrap(),
+            manager.validate_and_extract_original_dcid(&token, addr).unwrap(),
             ConnectionId::from_ref(b"foo")
         );
 
@@ -161,9 +155,7 @@ mod tests {
         let token = manager.gen(b"barbaz", addr);
 
         assert_eq!(
-            manager
-                .validate_and_extract_original_dcid(&token, addr)
-                .unwrap(),
+            manager.validate_and_extract_original_dcid(&token, addr).unwrap(),
             ConnectionId::from_ref(b"barbaz")
         );
     }
@@ -175,20 +167,17 @@ mod tests {
         let v6_addr = "[::1]:1338".parse().unwrap();
 
         for addr in &[v4_addr, v6_addr] {
-            assert!(manager
-                .validate_and_extract_original_dcid(b"", *addr)
-                .is_err());
+            assert!(manager.validate_and_extract_original_dcid(b"", *addr).is_err());
 
-            assert!(manager
-                .validate_and_extract_original_dcid(&[1u8; HMAC_TAG_LEN], *addr)
-                .is_err());
+            assert!(
+                manager.validate_and_extract_original_dcid(&[1u8; HMAC_TAG_LEN], *addr).is_err()
+            );
 
-            assert!(manager
-                .validate_and_extract_original_dcid(
-                    &[1u8; HMAC_TAG_LEN + 1],
-                    *addr
-                )
-                .is_err());
+            assert!(
+                manager
+                    .validate_and_extract_original_dcid(&[1u8; HMAC_TAG_LEN + 1], *addr)
+                    .is_err()
+            );
         }
     }
 
@@ -198,21 +187,19 @@ mod tests {
 
         let token = manager.gen(b"foo", "127.0.0.1:1337".parse().unwrap());
 
-        assert!(manager
-            .validate_and_extract_original_dcid(
-                &token,
-                "127.0.0.2:1337".parse().unwrap()
-            )
-            .is_err());
+        assert!(
+            manager
+                .validate_and_extract_original_dcid(&token, "127.0.0.2:1337".parse().unwrap())
+                .is_err()
+        );
 
         let token = manager.gen(b"barbaz", "[::1]:1338".parse().unwrap());
 
-        assert!(manager
-            .validate_and_extract_original_dcid(
-                &token,
-                "[::2]:1338".parse().unwrap()
-            )
-            .is_err());
+        assert!(
+            manager
+                .validate_and_extract_original_dcid(&token, "[::2]:1338".parse().unwrap())
+                .is_err()
+        );
     }
 
     #[test]
@@ -224,8 +211,6 @@ mod tests {
 
         token[..HMAC_TAG_LEN].copy_from_slice(&[1u8; HMAC_TAG_LEN]);
 
-        assert!(manager
-            .validate_and_extract_original_dcid(&token, addr)
-            .is_err());
+        assert!(manager.validate_and_extract_original_dcid(&token, addr).is_err());
     }
 }

@@ -29,7 +29,6 @@ use std::sync::Arc;
 
 use tokio::sync::mpsc;
 
-use super::datagram;
 use super::DriverHooks;
 use super::H3Command;
 use super::H3ConnectionError;
@@ -39,8 +38,9 @@ use super::H3Driver;
 use super::H3Event;
 use super::InboundHeaders;
 use super::IncomingH3Headers;
-use super::StreamCtx;
 use super::STREAM_CAPACITY;
+use super::StreamCtx;
+use super::datagram;
 use crate::http3::settings::Http3Settings;
 use crate::http3::settings::Http3SettingsEnforcer;
 use crate::http3::settings::Http3TimeoutType;
@@ -123,7 +123,7 @@ impl From<H3Event> for ServerH3Event {
                     priority: None,
                     is_in_early_data: IsInEarlyData::new(false),
                 }
-            },
+            }
             _ => Self::Core(ev),
         }
     }
@@ -175,7 +175,8 @@ impl ServerHooks {
     /// [`H3Event`] to the [ServerH3Controller] for application-level
     /// processing.
     fn handle_request(
-        driver: &mut H3Driver<Self>, qconn: &mut QuicheConnection,
+        driver: &mut H3Driver<Self>,
+        qconn: &mut QuicheConnection,
         headers: InboundHeaders,
     ) -> H3ConnectionResult<()> {
         let InboundHeaders {
@@ -191,8 +192,7 @@ impl ServerHooks {
             return Ok(());
         }
 
-        let (mut stream_ctx, send, recv) =
-            StreamCtx::new(stream_id, STREAM_CAPACITY);
+        let (mut stream_ctx, send, recv) = StreamCtx::new(stream_id, STREAM_CAPACITY);
 
         // When Extended CONNECT is enabled, extract the datagram flow ID
         // from the request headers and register it in flow_map. This
@@ -201,19 +201,14 @@ impl ServerHooks {
         // connection will not be closed in cleanup_stream() while
         // flows remain.
         if driver.hooks.extended_connect_enabled() {
-            if let Some(flow_id) =
-                datagram::extract_quarter_stream_id(stream_id, &headers)
-            {
+            if let Some(flow_id) = datagram::extract_quarter_stream_id(stream_id, &headers) {
                 let _ = driver.get_or_insert_flow(flow_id)?;
                 stream_ctx.associated_dgram_flow_id = Some(flow_id);
             }
         }
 
-        let latest_priority_update: Option<RawPriorityValue> = driver
-            .conn_mut()?
-            .take_last_priority_update(stream_id)
-            .ok()
-            .map(|v| v.into());
+        let latest_priority_update: Option<RawPriorityValue> =
+            driver.conn_mut()?.take_last_priority_update(stream_id).ok().map(|v| v.into());
 
         // Boost the priority of the stream until we write response headers via
         // process_write_frame(), which will set the desired priority. Since it
@@ -235,9 +230,7 @@ impl ServerHooks {
             h3_audit_stats: Arc::clone(&stream_ctx.audit_stats),
         };
 
-        driver
-            .waiting_streams
-            .push(stream_ctx.wait_for_recv(stream_id));
+        driver.waiting_streams.push(stream_ctx.wait_for_recv(stream_id));
         driver.insert_stream(stream_id, stream_ctx);
 
         driver
@@ -273,7 +266,8 @@ impl DriverHooks for ServerHooks {
     }
 
     fn conn_established(
-        driver: &mut H3Driver<Self>, qconn: &mut QuicheConnection,
+        driver: &mut H3Driver<Self>,
+        qconn: &mut QuicheConnection,
         handshake_info: &HandshakeInfo,
     ) -> H3ConnectionResult<()> {
         assert!(
@@ -281,9 +275,7 @@ impl DriverHooks for ServerHooks {
             "ServerH3Driver requires a server-side QUIC connection"
         );
 
-        if let Some(post_accept_timeout) =
-            driver.hooks.settings_enforcer.post_accept_timeout()
-        {
+        if let Some(post_accept_timeout) = driver.hooks.settings_enforcer.post_accept_timeout() {
             let remaining = post_accept_timeout
                 .checked_sub(handshake_info.elapsed())
                 .ok_or(H3ConnectionError::PostAcceptTimeout)?;
@@ -299,16 +291,12 @@ impl DriverHooks for ServerHooks {
     }
 
     fn headers_received(
-        driver: &mut H3Driver<Self>, qconn: &mut QuicheConnection,
+        driver: &mut H3Driver<Self>,
+        qconn: &mut QuicheConnection,
         headers: InboundHeaders,
     ) -> H3ConnectionResult<()> {
-        if driver
-            .hooks
-            .settings_enforcer
-            .enforce_requests_limit(driver.hooks.requests)
-        {
-            let _ =
-                qconn.close(true, quiche::h3::WireErrorCode::NoError as u64, &[]);
+        if driver.hooks.settings_enforcer.enforce_requests_limit(driver.hooks.requests) {
+            let _ = qconn.close(true, quiche::h3::WireErrorCode::NoError as u64, &[]);
             return Ok(());
         }
 
@@ -322,7 +310,8 @@ impl DriverHooks for ServerHooks {
     }
 
     fn conn_command(
-        driver: &mut H3Driver<Self>, qconn: &mut QuicheConnection,
+        driver: &mut H3Driver<Self>,
+        qconn: &mut QuicheConnection,
         cmd: Self::Command,
     ) -> H3ConnectionResult<()> {
         let ServerH3Command::Core(cmd) = cmd;
@@ -333,9 +322,7 @@ impl DriverHooks for ServerHooks {
         driver.hooks.settings_enforcer.has_pending_timeouts()
     }
 
-    async fn wait_for_action(
-        &mut self, qconn: &mut QuicheConnection,
-    ) -> H3ConnectionResult<()> {
+    async fn wait_for_action(&mut self, qconn: &mut QuicheConnection) -> H3ConnectionResult<()> {
         self.settings_enforcer.enforce_timeouts(qconn).await?;
         Err(H3ConnectionError::PostAcceptTimeout)
     }

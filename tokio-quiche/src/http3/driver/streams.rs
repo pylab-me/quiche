@@ -69,7 +69,8 @@ impl StreamCtx {
     /// Creates a new [StreamCtx]. This method returns the [StreamCtx] itself
     /// as well as the sender/receiver that it communicates with.
     pub(crate) fn new(
-        stream_id: u64, capacity: usize,
+        stream_id: u64,
+        capacity: usize,
     ) -> (Self, OutboundFrameSender, InboundFrameStream) {
         let (forward_sender, forward_receiver) = mpsc::channel(capacity);
         let (backward_sender, backward_receiver) = mpsc::channel(capacity);
@@ -115,8 +116,7 @@ impl StreamCtx {
     /// RFC)
     pub(crate) fn handle_recvd_stop_sending(&mut self, wire_err_code: u64) {
         // Update stats even if the stream is already closing.
-        self.audit_stats
-            .set_recvd_stop_sending_error_code(wire_err_code as i64);
+        self.audit_stats.set_recvd_stop_sending_error_code(wire_err_code as i64);
 
         if self.fin_or_reset_sent {
             // It is valid to receive STOP_SENDING after we already sent fin
@@ -141,23 +141,20 @@ impl StreamCtx {
         // We received a RESET_STREAM frame, which closes the read direction
         // but not the write direction. If the peer wants to shut down write,
         // it must also send STOP_SENDING
-        self.audit_stats
-            .set_recvd_reset_stream_error_code(wire_err_code as i64);
+        self.audit_stats.set_recvd_reset_stream_error_code(wire_err_code as i64);
         self.fin_or_reset_recv = true;
         self.send = None;
     }
 
     pub(crate) fn handle_sent_reset(&mut self, wire_err_code: u64) {
         debug_assert!(!self.fin_or_reset_sent);
-        self.audit_stats
-            .set_sent_reset_stream_error_code(wire_err_code as i64);
+        self.audit_stats.set_sent_reset_stream_error_code(wire_err_code as i64);
         self.fin_or_reset_sent = true;
     }
 
     pub(crate) fn handle_sent_stop_sending(&mut self, wire_err_code: u64) {
         debug_assert!(!self.fin_or_reset_recv);
-        self.audit_stats
-            .set_sent_stop_sending_error_code(wire_err_code as i64);
+        self.audit_stats.set_sent_stop_sending_error_code(wire_err_code as i64);
         // It is ok for us to set the `fin_reset_recv` flag here.  While the peer
         // must still send a fin or reset_stream with its final size, we don't
         // need to read it from the stream. Quiche will take care of that.
@@ -209,10 +206,8 @@ impl Future for WaitForStream {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match self.get_mut() {
-            WaitForStream::Downstream(d) =>
-                Pin::new(d).poll(cx).map(StreamReady::Downstream),
-            WaitForStream::Upstream(u) =>
-                Pin::new(u).poll(cx).map(StreamReady::Upstream),
+            WaitForStream::Downstream(d) => Pin::new(d).poll(cx).map(StreamReady::Downstream),
+            WaitForStream::Upstream(u) => Pin::new(u).poll(cx).map(StreamReady::Upstream),
         }
     }
 }
@@ -231,17 +226,13 @@ pub(crate) struct ReceivedDownstreamData {
 impl Future for WaitForDownstreamData {
     type Output = ReceivedDownstreamData;
 
-    fn poll(
-        mut self: Pin<&mut Self>, cx: &mut Context<'_>,
-    ) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         // Unwraps below are Ok because chan will only be None after first
         // Poll::Ready, which is fine to panic for non fused future.
-        self.chan.as_mut().unwrap().poll_recv(cx).map(|data| {
-            ReceivedDownstreamData {
-                stream_id: self.stream_id,
-                chan: self.chan.take().unwrap(),
-                data,
-            }
+        self.chan.as_mut().unwrap().poll_recv(cx).map(|data| ReceivedDownstreamData {
+            stream_id: self.stream_id,
+            chan: self.chan.take().unwrap(),
+            data,
         })
     }
 }
@@ -259,9 +250,7 @@ pub(crate) struct HaveUpstreamCapacity {
 impl Future for WaitForUpstreamCapacity {
     type Output = HaveUpstreamCapacity;
 
-    fn poll(
-        mut self: Pin<&mut Self>, cx: &mut Context<'_>,
-    ) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         // Unwraps below are Ok because chan will only be None after first
         // Poll::Ready, which is fine to panic for non fused future.
         match self.chan.as_mut().unwrap().poll_reserve(cx) {

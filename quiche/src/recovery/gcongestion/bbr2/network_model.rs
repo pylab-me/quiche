@@ -32,14 +32,13 @@ use std::ops::Add;
 use std::time::Duration;
 use std::time::Instant;
 
-use crate::recovery::gcongestion::bbr::BandwidthSampler;
-use crate::recovery::gcongestion::bbr2::Params;
-use crate::recovery::gcongestion::Bandwidth;
-use crate::recovery::gcongestion::Lost;
-
 use super::Acked;
 use super::BBRv2CongestionEvent;
 use super::BwLoMode;
+use crate::recovery::gcongestion::Bandwidth;
+use crate::recovery::gcongestion::Lost;
+use crate::recovery::gcongestion::bbr::BandwidthSampler;
+use crate::recovery::gcongestion::bbr2::Params;
 
 pub(super) const DEFAULT_MSS: usize = 1300;
 
@@ -65,7 +64,7 @@ impl RoundTripCounter {
                 self.round_trip_count += 1;
                 self.end_of_round_trip = Some(self.last_sent_packet);
                 true
-            },
+            }
         }
     }
 
@@ -287,13 +286,16 @@ impl BBRv2NetworkModel {
     }
 
     pub(super) fn on_packet_sent(
-        &mut self, sent_time: Instant, bytes_in_flight: usize,
-        packet_number: u64, bytes: usize, is_retransmissible: bool,
+        &mut self,
+        sent_time: Instant,
+        bytes_in_flight: usize,
+        packet_number: u64,
+        bytes: usize,
+        is_retransmissible: bool,
     ) {
         // Updating the min here ensures a more realistic (0) value when flows
         // exit quiescence.
-        self.min_bytes_in_flight_in_round =
-            self.min_bytes_in_flight_in_round.min(bytes_in_flight);
+        self.min_bytes_in_flight_in_round = self.min_bytes_in_flight_in_round.min(bytes_in_flight);
 
         if bytes_in_flight + bytes >= self.inflight_hi {
             self.inflight_hi_limited_in_round = true;
@@ -310,21 +312,22 @@ impl BBRv2NetworkModel {
     }
 
     pub(super) fn on_congestion_event_start(
-        &mut self, acked_packets: &[Acked], lost_packets: &[Lost],
-        congestion_event: &mut BBRv2CongestionEvent, params: &Params,
+        &mut self,
+        acked_packets: &[Acked],
+        lost_packets: &[Lost],
+        congestion_event: &mut BBRv2CongestionEvent,
+        params: &Params,
     ) {
         let prior_bytes_acked = self.total_bytes_acked();
         let prior_bytes_lost = self.total_bytes_lost();
 
         let event_time = congestion_event.event_time;
 
-        congestion_event.end_of_round_trip =
-            if let Some(largest_acked) = acked_packets.last() {
-                self.round_trip_counter
-                    .on_packets_acked(largest_acked.pkt_num)
-            } else {
-                false
-            };
+        congestion_event.end_of_round_trip = if let Some(largest_acked) = acked_packets.last() {
+            self.round_trip_counter.on_packets_acked(largest_acked.pkt_num)
+        } else {
+            false
+        };
 
         let sample = self.bandwidth_sampler.on_congestion_event(
             event_time,
@@ -336,14 +339,12 @@ impl BBRv2NetworkModel {
         );
 
         if sample.extra_acked == 0 {
-            self.cwnd_limited_before_aggregation_epoch = congestion_event
-                .prior_bytes_in_flight >=
-                congestion_event.prior_cwnd;
+            self.cwnd_limited_before_aggregation_epoch =
+                congestion_event.prior_bytes_in_flight >= congestion_event.prior_cwnd;
         }
 
         if sample.last_packet_send_state.is_valid {
-            congestion_event.last_packet_send_state =
-                sample.last_packet_send_state;
+            congestion_event.last_packet_send_state = sample.last_packet_send_state;
         }
 
         // Avoid updating `max_bandwidth_filter` if a) this is a loss-only event,
@@ -353,9 +354,7 @@ impl BBRv2NetworkModel {
         if let Some(sample_max) = sample.sample_max_bandwidth {
             if prior_bytes_acked != self.total_bytes_acked() {
                 congestion_event.sample_max_bandwidth = Some(sample_max);
-                if !sample.sample_is_app_limited ||
-                    sample_max > self.max_bandwidth()
-                {
+                if !sample.sample_is_app_limited || sample_max > self.max_bandwidth() {
                     self.max_bandwidth_filter.update(sample_max);
                 }
             }
@@ -369,8 +368,7 @@ impl BBRv2NetworkModel {
         self.latest_send_rate = sample.sample_max_send_rate;
         self.latest_ack_rate = sample.sample_max_ack_rate;
 
-        congestion_event.bytes_acked =
-            self.total_bytes_acked() - prior_bytes_acked;
+        congestion_event.bytes_acked = self.total_bytes_acked() - prior_bytes_acked;
         congestion_event.bytes_lost = self.total_bytes_lost() - prior_bytes_lost;
 
         congestion_event.bytes_in_flight = congestion_event
@@ -383,20 +381,18 @@ impl BBRv2NetworkModel {
             self.loss_events_in_round += 1;
         }
 
-        if congestion_event.bytes_acked > 0 &&
-            congestion_event.last_packet_send_state.is_valid &&
-            self.total_bytes_acked() >
-                congestion_event.last_packet_send_state.total_bytes_acked
+        if congestion_event.bytes_acked > 0
+            && congestion_event.last_packet_send_state.is_valid
+            && self.total_bytes_acked() > congestion_event.last_packet_send_state.total_bytes_acked
         {
-            let bytes_delivered = self.total_bytes_acked() -
-                congestion_event.last_packet_send_state.total_bytes_acked;
+            let bytes_delivered = self.total_bytes_acked()
+                - congestion_event.last_packet_send_state.total_bytes_acked;
             self.max_bytes_delivered_in_round =
                 self.max_bytes_delivered_in_round.max(bytes_delivered);
         }
 
-        self.min_bytes_in_flight_in_round = self
-            .min_bytes_in_flight_in_round
-            .min(congestion_event.bytes_in_flight);
+        self.min_bytes_in_flight_in_round =
+            self.min_bytes_in_flight_in_round.min(congestion_event.bytes_in_flight);
 
         // `bandwidth_latest` and `inflight_latest` only increased within a
         // round.
@@ -428,13 +424,9 @@ impl BBRv2NetworkModel {
         self.bandwidth_sampler.on_packet_neutered(packet_number)
     }
 
-    fn adapt_lower_bounds(
-        &mut self, congestion_event: &BBRv2CongestionEvent, params: &Params,
-    ) {
+    fn adapt_lower_bounds(&mut self, congestion_event: &BBRv2CongestionEvent, params: &Params) {
         if params.bw_lo_mode == BwLoMode::Default {
-            if !congestion_event.end_of_round_trip ||
-                congestion_event.is_probing_for_bandwidth
-            {
+            if !congestion_event.end_of_round_trip || congestion_event.is_probing_for_bandwidth {
                 return;
             }
 
@@ -444,16 +436,14 @@ impl BBRv2NetworkModel {
                 }
 
                 self.bandwidth_lo = Some(
-                    self.bandwidth_latest
-                        .max(self.bandwidth_lo.unwrap() * (1.0 - params.beta)),
+                    self.bandwidth_latest.max(self.bandwidth_lo.unwrap() * (1.0 - params.beta)),
                 );
 
                 if self.inflight_lo == usize::MAX {
                     self.inflight_lo = congestion_event.prior_cwnd;
                 }
 
-                let inflight_lo_new =
-                    (self.inflight_lo as f32 * (1.0 - params.beta)) as usize;
+                let inflight_lo_new = (self.inflight_lo as f32 * (1.0 - params.beta)) as usize;
                 self.inflight_lo = self.inflight_latest.max(inflight_lo_new);
             }
             return;
@@ -488,39 +478,34 @@ impl BBRv2NetworkModel {
                     self.min_rtt(),
                 );
 
-                self.bandwidth_lo = self
-                    .bandwidth_lo
-                    .map(|b| (b - reduction).unwrap_or(Bandwidth::zero()));
-            },
+                self.bandwidth_lo =
+                    self.bandwidth_lo.map(|b| (b - reduction).unwrap_or(Bandwidth::zero()));
+            }
             BwLoMode::InflightReduction => {
                 // Use a max of BDP and inflight to avoid starving app-limited
                 // flows.
-                let effective_inflight =
-                    self.bdp0().max(congestion_event.prior_bytes_in_flight);
+                let effective_inflight = self.bdp0().max(congestion_event.prior_bytes_in_flight);
                 // This could use bytes_lost_in_round if the bandwidth_lo_ was
                 // saved when entering 'recovery', but this BBRv2
                 // implementation doesn't have recovery defined.
                 self.bandwidth_lo = self.bandwidth_lo.map(|b| {
-                    b * ((effective_inflight as f64 -
-                        congestion_event.bytes_lost as f64) /
-                        effective_inflight as f64)
+                    b * ((effective_inflight as f64 - congestion_event.bytes_lost as f64)
+                        / effective_inflight as f64)
                 });
-            },
+            }
             BwLoMode::CwndReduction => {
                 self.bandwidth_lo = self.bandwidth_lo.map(|b| {
-                    b * ((congestion_event.prior_cwnd as f64 -
-                        congestion_event.bytes_lost as f64) /
-                        congestion_event.prior_cwnd as f64)
+                    b * ((congestion_event.prior_cwnd as f64 - congestion_event.bytes_lost as f64)
+                        / congestion_event.prior_cwnd as f64)
                 });
-            },
+            }
         }
 
         let mut last_bandwidth = self.bandwidth_latest;
         // sample_max_bandwidth will be None if the loss is triggered by a timer
         // expiring. Ideally we'd use the most recent bandwidth sample,
         // but bandwidth_latest is safer than None.
-        if let Some(sample_max_bandwidth) = congestion_event.sample_max_bandwidth
-        {
+        if let Some(sample_max_bandwidth) = congestion_event.sample_max_bandwidth {
             // bandwidth_latest is the max bandwidth for the round, but to allow
             // fast, conservation style response to loss, use the last sample.
             last_bandwidth = sample_max_bandwidth;
@@ -540,36 +525,36 @@ impl BBRv2NetworkModel {
         // If it's the end of the round, ensure bandwidth_lo doesn't decrease more
         // than beta.
         if congestion_event.end_of_round_trip {
-            self.bandwidth_lo = self.bandwidth_lo.max(
-                self.prior_bandwidth_lo
-                    .take()
-                    .map(|b| b * (1.0 - params.beta)),
-            )
+            self.bandwidth_lo = self
+                .bandwidth_lo
+                .max(self.prior_bandwidth_lo.take().map(|b| b * (1.0 - params.beta)))
         }
         // These modes ignore inflight_lo as well.
     }
 
     pub(super) fn on_congestion_event_finish(
-        &mut self, least_unacked_packet: u64,
+        &mut self,
+        least_unacked_packet: u64,
         congestion_event: &BBRv2CongestionEvent,
     ) {
         if congestion_event.end_of_round_trip {
             self.on_new_round();
         }
 
-        self.bandwidth_sampler
-            .remove_obsolete_packets(least_unacked_packet);
+        self.bandwidth_sampler.remove_obsolete_packets(least_unacked_packet);
     }
 
     pub(super) fn maybe_expire_min_rtt(
-        &mut self, congestion_event: &BBRv2CongestionEvent, params: &Params,
+        &mut self,
+        congestion_event: &BBRv2CongestionEvent,
+        params: &Params,
     ) -> bool {
         if congestion_event.sample_min_rtt.is_none() {
             return false;
         }
 
-        if congestion_event.event_time <
-            self.min_rtt_filter.min_rtt_timestamp + params.probe_rtt_period
+        if congestion_event.event_time
+            < self.min_rtt_filter.min_rtt_timestamp + params.probe_rtt_period
         {
             return false;
         }
@@ -583,7 +568,9 @@ impl BBRv2NetworkModel {
     }
 
     pub(super) fn is_inflight_too_high(
-        &self, congestion_event: &BBRv2CongestionEvent, max_loss_events: usize,
+        &self,
+        congestion_event: &BBRv2CongestionEvent,
+        max_loss_events: usize,
         params: &Params,
     ) -> bool {
         let send_state = &congestion_event.last_packet_send_state;
@@ -628,7 +615,9 @@ impl BBRv2NetworkModel {
     }
 
     pub(super) fn has_bandwidth_growth(
-        &mut self, congestion_event: &BBRv2CongestionEvent, params: &Params,
+        &mut self,
+        congestion_event: &BBRv2CongestionEvent,
+        params: &Params,
     ) -> bool {
         let threshold = self.full_bandwidth_baseline * params.full_bw_threshold;
 
@@ -644,16 +633,16 @@ impl BBRv2NetworkModel {
             return false;
         }
 
-        let ignore_round = self.ignore_app_limited_for_no_bandwidth_growth &&
-            congestion_event.last_packet_send_state.is_app_limited;
+        let ignore_round = self.ignore_app_limited_for_no_bandwidth_growth
+            && congestion_event.last_packet_send_state.is_app_limited;
 
         if !ignore_round {
             self.rounds_without_bandwidth_growth += 1;
         }
 
         // full_bandwidth_reached is only set to true when not app-limited
-        if self.rounds_without_bandwidth_growth >= params.startup_full_bw_rounds &&
-            !congestion_event.last_packet_send_state.is_app_limited
+        if self.rounds_without_bandwidth_growth >= params.startup_full_bw_rounds
+            && !congestion_event.last_packet_send_state.is_app_limited
         {
             self.full_bandwidth_reached = true;
         }
@@ -666,9 +655,7 @@ impl BBRv2NetworkModel {
         2 * DEFAULT_MSS
     }
 
-    pub(super) fn check_persistent_queue(
-        &mut self, target_gain: f32, params: &Params,
-    ) {
+    pub(super) fn check_persistent_queue(&mut self, target_gain: f32, params: &Params) {
         let target = self
             .bdp(self.max_bandwidth(), target_gain)
             .max(self.bdp0() + self.queueing_threshold_extra_bytes());
@@ -730,8 +717,7 @@ impl BBRv2NetworkModel {
     }
 
     pub(super) fn inflight_hi_with_headroom(&self, params: &Params) -> usize {
-        let headroom =
-            (self.inflight_hi as f32 * params.inflight_hi_headroom) as usize;
+        let headroom = (self.inflight_hi as f32 * params.inflight_hi_headroom) as usize;
         self.inflight_hi.saturating_sub(headroom)
     }
 

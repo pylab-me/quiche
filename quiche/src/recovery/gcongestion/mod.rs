@@ -34,10 +34,9 @@ use std::str::FromStr;
 use std::time::Instant;
 
 pub use self::recovery::GRecovery;
-use crate::recovery::bandwidth::Bandwidth;
-
-use crate::recovery::rtt::RttStats;
 use crate::recovery::RecoveryStats;
+use crate::recovery::bandwidth::Bandwidth;
+use crate::recovery::rtt::RttStats;
 
 #[derive(Debug)]
 pub struct Lost {
@@ -76,8 +75,12 @@ pub(super) trait CongestionControl: Debug {
     /// before the packet was sent. Note: this function must be called for
     /// every packet sent to the wire.
     fn on_packet_sent(
-        &mut self, sent_time: Instant, bytes_in_flight: usize,
-        packet_number: u64, bytes: usize, is_retransmissible: bool,
+        &mut self,
+        sent_time: Instant,
+        bytes_in_flight: usize,
+        packet_number: u64,
+        bytes: usize,
+        is_retransmissible: bool,
     );
 
     /// Inform that `packet_number` has been neutered.
@@ -91,9 +94,15 @@ pub(super) trait CongestionControl: Debug {
     /// congestion event.
     #[allow(clippy::too_many_arguments)]
     fn on_congestion_event(
-        &mut self, rtt_updated: bool, prior_in_flight: usize,
-        bytes_in_flight: usize, event_time: Instant, acked_packets: &[Acked],
-        lost_packets: &[Lost], least_unacked: u64, rtt_stats: &RttStats,
+        &mut self,
+        rtt_updated: bool,
+        prior_in_flight: usize,
+        bytes_in_flight: usize,
+        event_time: Instant,
+        acked_packets: &[Acked],
+        lost_packets: &[Lost],
+        least_unacked: u64,
+        rtt_stats: &RttStats,
         recovery_stats: &mut RecoveryStats,
     );
 
@@ -113,9 +122,7 @@ pub(super) trait CongestionControl: Debug {
     #[allow(dead_code)]
     fn is_cwnd_limited(&self, bytes_in_flight: usize) -> bool;
 
-    fn pacing_rate(
-        &self, bytes_in_flight: usize, rtt_stats: &RttStats,
-    ) -> Bandwidth;
+    fn pacing_rate(&self, bytes_in_flight: usize, rtt_stats: &RttStats) -> Bandwidth;
 
     fn bandwidth_estimate(&self, rtt_stats: &RttStats) -> Bandwidth;
 
@@ -243,16 +250,16 @@ pub struct BbrParams {
 #[doc(hidden)]
 pub enum BbrBwLoReductionStrategy {
     /// Uses the default strategy based on `BBRBeta`.
-    Default           = 0,
+    Default = 0,
 
     /// Considers min-rtt to estimate bandwidth reduction.
-    MinRttReduction   = 1,
+    MinRttReduction = 1,
 
     /// Considers inflight data to estimate bandwidth reduction.
     InflightReduction = 2,
 
     /// Considers cwnd to estimate bandwidth reduction.
-    CwndReduction     = 3,
+    CwndReduction = 3,
 }
 
 #[doc(hidden)]

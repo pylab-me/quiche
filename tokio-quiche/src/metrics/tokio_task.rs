@@ -34,9 +34,6 @@
 //! This does *not* rely on the tokio-metrics crate, as that has more overhead
 //! than we would like.
 
-use crate::metrics::Metrics;
-use foundations::telemetry::TelemetryContext;
-use pin_project::pin_project;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -46,8 +43,13 @@ use std::task::Poll;
 use std::task::Wake;
 use std::task::Waker;
 use std::time::Instant;
+
+use foundations::telemetry::TelemetryContext;
+use pin_project::pin_project;
 use task_killswitch::spawn_with_killswitch as killswitch_spawn;
 use tokio::task::JoinHandle;
+
+use crate::metrics::Metrics;
 
 /// An instrumented future.
 ///

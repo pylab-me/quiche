@@ -24,8 +24,9 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use crate::settings::TlsCertificatePaths;
 use boring::ssl::SslContextBuilder;
+
+use crate::settings::TlsCertificatePaths;
 
 /// A set of hooks executed at the level of a [quiche::Connection].
 pub trait ConnectionHook {
@@ -39,6 +40,7 @@ pub trait ConnectionHook {
     /// Only called if both the hook and [`TlsCertificatePaths`] are set in
     /// [`ConnectionParams`](crate::ConnectionParams).
     fn create_custom_ssl_context_builder(
-        &self, settings: TlsCertificatePaths<'_>,
+        &self,
+        settings: TlsCertificatePaths<'_>,
     ) -> Option<SslContextBuilder>;
 }

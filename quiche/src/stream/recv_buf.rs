@@ -25,21 +25,17 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::cmp;
-
 use std::collections::BTreeMap;
 use std::collections::VecDeque;
-
 use std::time::Duration;
 use std::time::Instant;
 
-use crate::stream::RecvAction;
-use crate::stream::RecvBufResetReturn;
 use crate::Error;
 use crate::Result;
-
 use crate::flowcontrol;
-
 use crate::range_buf::RangeBuf;
+use crate::stream::RecvAction;
+use crate::stream::RecvBufResetReturn;
 
 /// Receive-side stream buffer.
 ///
@@ -75,11 +71,7 @@ impl RecvBuf {
     /// Creates a new receive buffer.
     pub fn new(max_data: u64, initial_window: u64, max_window: u64) -> RecvBuf {
         RecvBuf {
-            flow_control: flowcontrol::FlowControl::new(
-                max_data,
-                initial_window,
-                max_window,
-            ),
+            flow_control: flowcontrol::FlowControl::new(max_data, initial_window, max_window),
             ..RecvBuf::default()
         }
     }
@@ -179,8 +171,7 @@ impl RecvBuf {
 
                     // New buffer's end overlaps existing buffer.
                     if off < b.off() && buf.max_off() > b.off() {
-                        tmp_bufs
-                            .push_back(buf.split_off((b.off() - off) as usize));
+                        tmp_bufs.push_back(buf.split_off((b.off() - off) as usize));
                     }
                 }
             }
@@ -228,7 +219,8 @@ impl RecvBuf {
     /// On success the amount of data read or discarded, and a flag indicating
     /// if there is no more data in the buffer, are returned as a tuple.
     pub fn emit_or_discard<B: bytes::BufMut>(
-        &mut self, mut action: RecvAction<B>,
+        &mut self,
+        mut action: RecvAction<B>,
     ) -> Result<(usize, bool)> {
         let mut len = 0;
         let mut cap = match &action {
@@ -263,10 +255,7 @@ impl RecvBuf {
                 // impls are allowed to grow the buffer, so we
                 // check here that we still have at least
                 // `cap` bytes, but we can't require equality
-                debug_assert!(
-                    cap <= out.remaining_mut(),
-                    "We updated `cap` incorrectly"
-                );
+                debug_assert!(cap <= out.remaining_mut(), "We updated `cap` incorrectly");
                 out.put_slice(&buf[..buf_len])
             }
 
@@ -292,9 +281,7 @@ impl RecvBuf {
     }
 
     /// Resets the stream at the given offset.
-    pub fn reset(
-        &mut self, error_code: u64, final_size: u64,
-    ) -> Result<RecvBufResetReturn> {
+    pub fn reset(&mut self, error_code: u64, final_size: u64) -> Result<RecvBufResetReturn> {
         // Stream's size is already known, forbid changing it.
         if let Some(fin_off) = self.fin_off {
             if fin_off != final_size {
@@ -427,10 +414,11 @@ impl RecvBuf {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::stream::DEFAULT_STREAM_WINDOW;
     use bytes::BufMut as _;
     use rstest::rstest;
+
+    use super::*;
+    use crate::stream::DEFAULT_STREAM_WINDOW;
 
     // Helper function for testing either buffer emit or discard.
     //
@@ -450,8 +438,12 @@ mod tests {
     // assert is performed against the bytes that were read out of the buffer,
     // to ensure caller expectations are met.
     fn assert_emit_discard(
-        recv: &mut RecvBuf, emit: bool, target_len: usize, result_len: usize,
-        is_fin: bool, test_bytes: Option<&[u8]>,
+        recv: &mut RecvBuf,
+        emit: bool,
+        target_len: usize,
+        result_len: usize,
+        is_fin: bool,
+        test_bytes: Option<&[u8]>,
     ) {
         let mut buf = Vec::<u8>::with_capacity(512).limit(target_len);
         let action = if emit {
@@ -489,8 +481,7 @@ mod tests {
 
     #[rstest]
     fn empty_read(#[values(true, false)] emit: bool) {
-        let mut recv =
-            RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
+        let mut recv = RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
         assert_eq!(recv.len, 0);
 
         assert_emit_discard_done(&mut recv, emit);
@@ -498,8 +489,7 @@ mod tests {
 
     #[rstest]
     fn empty_stream_frame(#[values(true, false)] emit: bool) {
-        let mut recv =
-            RecvBuf::new(15, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
+        let mut recv = RecvBuf::new(15, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
         assert_eq!(recv.len, 0);
 
         let buf = RangeBuf::from(b"hello", 0, false);
@@ -553,8 +543,7 @@ mod tests {
 
     #[rstest]
     fn ordered_read(#[values(true, false)] emit: bool) {
-        let mut recv =
-            RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
+        let mut recv = RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
         assert_eq!(recv.len, 0);
 
         let first = RangeBuf::from(b"hello", 0, false);
@@ -577,14 +566,7 @@ mod tests {
         assert_eq!(recv.len, 19);
         assert_eq!(recv.off, 0);
 
-        assert_emit_discard(
-            &mut recv,
-            emit,
-            32,
-            19,
-            true,
-            Some(b"helloworldsomething"),
-        );
+        assert_emit_discard(&mut recv, emit, 32, 19, true, Some(b"helloworldsomething"));
         assert_eq!(recv.len, 19);
         assert_eq!(recv.off, 19);
 
@@ -594,8 +576,7 @@ mod tests {
     /// Test shutdown behavior
     #[rstest]
     fn shutdown(#[values(true, false)] emit: bool) {
-        let mut recv =
-            RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
+        let mut recv = RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
         assert_eq!(recv.len, 0);
 
         let first = RangeBuf::from(b"hello", 0, false);
@@ -647,8 +628,7 @@ mod tests {
 
     #[rstest]
     fn split_read(#[values(true, false)] emit: bool) {
-        let mut recv =
-            RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
+        let mut recv = RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
         assert_eq!(recv.len, 0);
 
         let first = RangeBuf::from(b"something", 0, false);
@@ -677,8 +657,7 @@ mod tests {
 
     #[test]
     fn split_read_incremental_buf() {
-        let mut recv =
-            RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
+        let mut recv = RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
         assert_eq!(recv.len, 0);
 
         let first = RangeBuf::from(b"something", 0, false);
@@ -725,8 +704,7 @@ mod tests {
 
     #[rstest]
     fn incomplete_read(#[values(true, false)] emit: bool) {
-        let mut recv =
-            RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
+        let mut recv = RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
         assert_eq!(recv.len, 0);
 
         let mut buf = [0u8; 32];
@@ -751,22 +729,14 @@ mod tests {
         assert_eq!(recv.len, 19);
         assert_eq!(recv.off, 0);
 
-        assert_emit_discard(
-            &mut recv,
-            emit,
-            32,
-            19,
-            true,
-            Some(b"somethinghelloworld"),
-        );
+        assert_emit_discard(&mut recv, emit, 32, 19, true, Some(b"somethinghelloworld"));
         assert_eq!(recv.len, 19);
         assert_eq!(recv.off, 19);
     }
 
     #[rstest]
     fn zero_len_read(#[values(true, false)] emit: bool) {
-        let mut recv =
-            RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
+        let mut recv = RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
         assert_eq!(recv.len, 0);
 
         let first = RangeBuf::from(b"something", 0, false);
@@ -789,8 +759,7 @@ mod tests {
 
     #[rstest]
     fn past_read(#[values(true, false)] emit: bool) {
-        let mut recv =
-            RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
+        let mut recv = RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
         assert_eq!(recv.len, 0);
 
         let first = RangeBuf::from(b"something", 0, false);
@@ -824,8 +793,7 @@ mod tests {
 
     #[rstest]
     fn fully_overlapping_read(#[values(true, false)] emit: bool) {
-        let mut recv =
-            RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
+        let mut recv = RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
         assert_eq!(recv.len, 0);
 
         let first = RangeBuf::from(b"something", 0, false);
@@ -851,8 +819,7 @@ mod tests {
 
     #[rstest]
     fn fully_overlapping_read2(#[values(true, false)] emit: bool) {
-        let mut recv =
-            RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
+        let mut recv = RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
         assert_eq!(recv.len, 0);
 
         let first = RangeBuf::from(b"something", 0, false);
@@ -878,8 +845,7 @@ mod tests {
 
     #[rstest]
     fn fully_overlapping_read3(#[values(true, false)] emit: bool) {
-        let mut recv =
-            RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
+        let mut recv = RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
         assert_eq!(recv.len, 0);
 
         let first = RangeBuf::from(b"something", 0, false);
@@ -905,8 +871,7 @@ mod tests {
 
     #[rstest]
     fn fully_overlapping_read_multi(#[values(true, false)] emit: bool) {
-        let mut recv =
-            RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
+        let mut recv = RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
         assert_eq!(recv.len, 0);
 
         let first = RangeBuf::from(b"somethingsomething", 0, false);
@@ -928,14 +893,7 @@ mod tests {
         assert_eq!(recv.off, 0);
         assert_eq!(recv.data.len(), 5);
 
-        assert_emit_discard(
-            &mut recv,
-            emit,
-            32,
-            18,
-            false,
-            Some(b"somhellogsomhellog"),
-        );
+        assert_emit_discard(&mut recv, emit, 32, 18, false, Some(b"somhellogsomhellog"));
         assert_eq!(recv.len, 18);
         assert_eq!(recv.off, 18);
         assert_eq!(recv.data.len(), 0);
@@ -945,8 +903,7 @@ mod tests {
 
     #[rstest]
     fn overlapping_start_read(#[values(true, false)] emit: bool) {
-        let mut recv =
-            RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
+        let mut recv = RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
         assert_eq!(recv.len, 0);
 
         let first = RangeBuf::from(b"something", 0, false);
@@ -962,14 +919,7 @@ mod tests {
         assert_eq!(recv.off, 0);
         assert_eq!(recv.data.len(), 2);
 
-        assert_emit_discard(
-            &mut recv,
-            emit,
-            32,
-            13,
-            true,
-            Some(b"somethingello"),
-        );
+        assert_emit_discard(&mut recv, emit, 32, 13, true, Some(b"somethingello"));
 
         assert_eq!(recv.len, 13);
         assert_eq!(recv.off, 13);
@@ -979,8 +929,7 @@ mod tests {
 
     #[rstest]
     fn overlapping_end_read(#[values(true, false)] emit: bool) {
-        let mut recv =
-            RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
+        let mut recv = RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
         assert_eq!(recv.len, 0);
 
         let first = RangeBuf::from(b"hello", 0, false);
@@ -1005,8 +954,7 @@ mod tests {
 
     #[rstest]
     fn overlapping_end_twice_read(#[values(true, false)] emit: bool) {
-        let mut recv =
-            RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
+        let mut recv = RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
         assert_eq!(recv.len, 0);
 
         let first = RangeBuf::from(b"he", 0, false);
@@ -1042,11 +990,8 @@ mod tests {
     }
 
     #[rstest]
-    fn overlapping_end_twice_and_contained_read(
-        #[values(true, false)] emit: bool,
-    ) {
-        let mut recv =
-            RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
+    fn overlapping_end_twice_and_contained_read(#[values(true, false)] emit: bool) {
+        let mut recv = RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
         assert_eq!(recv.len, 0);
 
         let first = RangeBuf::from(b"hellow", 0, false);
@@ -1074,14 +1019,7 @@ mod tests {
         assert_eq!(recv.off, 0);
         assert_eq!(recv.data.len(), 5);
 
-        assert_emit_discard(
-            &mut recv,
-            emit,
-            32,
-            16,
-            true,
-            Some(b"helloworldbarfoo"),
-        );
+        assert_emit_discard(&mut recv, emit, 32, 16, true, Some(b"helloworldbarfoo"));
         assert_eq!(recv.len, 16);
         assert_eq!(recv.off, 16);
 
@@ -1089,11 +1027,8 @@ mod tests {
     }
 
     #[rstest]
-    fn partially_multi_overlapping_reordered_read(
-        #[values(true, false)] emit: bool,
-    ) {
-        let mut recv =
-            RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
+    fn partially_multi_overlapping_reordered_read(#[values(true, false)] emit: bool) {
+        let mut recv = RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
         assert_eq!(recv.len, 0);
 
         let first = RangeBuf::from(b"hello", 8, false);
@@ -1115,14 +1050,7 @@ mod tests {
         assert_eq!(recv.off, 0);
         assert_eq!(recv.data.len(), 3);
 
-        assert_emit_discard(
-            &mut recv,
-            emit,
-            32,
-            15,
-            true,
-            Some(b"somethinhelloar"),
-        );
+        assert_emit_discard(&mut recv, emit, 32, 15, true, Some(b"somethinhelloar"));
         assert_eq!(recv.len, 15);
         assert_eq!(recv.off, 15);
         assert_eq!(recv.data.len(), 0);
@@ -1131,11 +1059,8 @@ mod tests {
     }
 
     #[rstest]
-    fn partially_multi_overlapping_reordered_read2(
-        #[values(true, false)] emit: bool,
-    ) {
-        let mut recv =
-            RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
+    fn partially_multi_overlapping_reordered_read2(#[values(true, false)] emit: bool) {
+        let mut recv = RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
         assert_eq!(recv.len, 0);
 
         let first = RangeBuf::from(b"aaa", 0, false);
@@ -1175,14 +1100,7 @@ mod tests {
         assert_eq!(recv.off, 0);
         assert_eq!(recv.data.len(), 6);
 
-        assert_emit_discard(
-            &mut recv,
-            emit,
-            32,
-            14,
-            false,
-            Some(b"aabbbcdddeefff"),
-        );
+        assert_emit_discard(&mut recv, emit, 32, 14, false, Some(b"aabbbcdddeefff"));
         assert_eq!(recv.len, 14);
         assert_eq!(recv.off, 14);
         assert_eq!(recv.data.len(), 0);
@@ -1192,8 +1110,7 @@ mod tests {
 
     #[test]
     fn mixed_read_actions() {
-        let mut recv =
-            RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
+        let mut recv = RecvBuf::new(u64::MAX, DEFAULT_STREAM_WINDOW, DEFAULT_STREAM_WINDOW);
         assert_eq!(recv.len, 0);
 
         let first = RangeBuf::from(b"hello", 0, false);

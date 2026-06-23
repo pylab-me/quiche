@@ -84,9 +84,9 @@ impl Pmtud {
     /// Checks there are no probes in flight, that a PMTU has not been
     /// found, and that the minimum supported MTU has not been reached.
     pub fn should_probe(&self) -> bool {
-        !self.in_flight &&
-            self.pmtu.is_none() &&
-            self.smallest_failed_probe_size != Some(MIN_PLPMTU)
+        !self.in_flight
+            && self.pmtu.is_none()
+            && self.smallest_failed_probe_size != Some(MIN_PLPMTU)
     }
 
     /// Sets the PMTUD probe size.
@@ -138,22 +138,22 @@ impl Pmtud {
                     debug!("Found PMTU: {successful_probe_size}");
                     self.set_pmtu(successful_probe_size);
                 } else {
-                    self.probe_size =
-                        (successful_probe_size + failed_probe_size) / 2
+                    self.probe_size = (successful_probe_size + failed_probe_size) / 2
                 }
-            },
+            }
 
             // With only failed probes, binary search between the smallest failed
             // probe and the minimum supported MTU
-            (Some(failed_probe_size), None) =>
-                self.probe_size = (MIN_PLPMTU + failed_probe_size) / 2,
+            (Some(failed_probe_size), None) => {
+                self.probe_size = (MIN_PLPMTU + failed_probe_size) / 2
+            }
 
             // As the algorithm is optimistic in that the initial probe size
             // is the maximum supported MTU, then having only a successful probe
             // means the maximum supported MTU is <= PMTU
             (None, Some(successful_probe_size)) => {
                 self.set_pmtu(successful_probe_size);
-            },
+            }
 
             // Use the initial probe size if no record of success/failures
             (None, None) => self.probe_size = self.maximum_supported_mtu,
@@ -204,10 +204,8 @@ impl Pmtud {
         // Check if we have one instance of a failed probe so that a min
         // comparison can be made otherwise if this is the first failed
         // probe just record it
-        self.smallest_failed_probe_size = Some(
-            self.smallest_failed_probe_size
-                .map_or(probe_size, |s| s.min(probe_size)),
-        );
+        self.smallest_failed_probe_size =
+            Some(self.smallest_failed_probe_size.map_or(probe_size, |s| s.min(probe_size)));
 
         self.probe_failure_count = 0;
         self.update_probe_size();

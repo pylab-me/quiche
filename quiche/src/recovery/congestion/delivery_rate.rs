@@ -32,10 +32,9 @@
 use std::time::Duration;
 use std::time::Instant;
 
-use crate::recovery::bandwidth::Bandwidth;
-
 use super::Acked;
 use super::Sent;
+use crate::recovery::bandwidth::Bandwidth;
 
 #[derive(Debug)]
 pub struct Rate {
@@ -81,9 +80,7 @@ impl Default for Rate {
 }
 
 impl Rate {
-    pub fn on_packet_sent(
-        &mut self, pkt: &mut Sent, bytes_in_flight: usize, bytes_lost: u64,
-    ) {
+    pub fn on_packet_sent(&mut self, pkt: &mut Sent, bytes_in_flight: usize, bytes_lost: u64) {
         // No packets in flight.
         if bytes_in_flight == 0 {
             self.first_sent_time = pkt.time_sent;
@@ -107,8 +104,8 @@ impl Rate {
 
         // Update info using the newest packet. If rate_sample is not yet
         // initialized, initialize with the first packet.
-        if self.rate_sample.prior_time.is_none() ||
-            pkt.delivered >= self.rate_sample.prior_delivered
+        if self.rate_sample.prior_time.is_none()
+            || pkt.delivered >= self.rate_sample.prior_delivered
         {
             self.rate_sample.prior_delivered = pkt.delivered;
             self.rate_sample.prior_time = Some(pkt.delivered_time);
@@ -116,9 +113,8 @@ impl Rate {
             self.rate_sample.send_elapsed =
                 pkt.time_sent.saturating_duration_since(pkt.first_sent_time);
             self.rate_sample.rtt = pkt.rtt;
-            self.rate_sample.ack_elapsed = self
-                .delivered_time
-                .saturating_duration_since(pkt.delivered_time);
+            self.rate_sample.ack_elapsed =
+                self.delivered_time.saturating_duration_since(pkt.delivered_time);
 
             self.first_sent_time = pkt.time_sent;
         }
@@ -133,13 +129,9 @@ impl Rate {
         }
 
         if self.rate_sample.prior_time.is_some() {
-            let interval = self
-                .rate_sample
-                .send_elapsed
-                .max(self.rate_sample.ack_elapsed);
+            let interval = self.rate_sample.send_elapsed.max(self.rate_sample.ack_elapsed);
 
-            self.rate_sample.delivered =
-                self.delivered - self.rate_sample.prior_delivered;
+            self.rate_sample.delivered = self.delivered - self.rate_sample.prior_delivered;
             self.rate_sample.interval = interval;
 
             if interval < min_rtt {
@@ -151,10 +143,8 @@ impl Rate {
 
             if !interval.is_zero() {
                 let rate_sample_bandwidth = {
-                    let rate_sample_bytes_per_second = (self.rate_sample.delivered
-                        as f64 /
-                        interval.as_secs_f64())
-                        as u64;
+                    let rate_sample_bytes_per_second =
+                        (self.rate_sample.delivered as f64 / interval.as_secs_f64()) as u64;
 
                     Bandwidth::from_bytes_per_second(rate_sample_bytes_per_second)
                 };
@@ -165,8 +155,8 @@ impl Rate {
                 // - the new rate is higher than the previous value
                 //
                 // [linux] https://github.com/torvalds/linux/commit/eb8329e0a04db0061f714f033b4454326ba147f4
-                if !self.rate_sample.is_app_limited ||
-                    rate_sample_bandwidth > self.rate_sample.bandwidth
+                if !self.rate_sample.is_app_limited
+                    || rate_sample_bandwidth > self.rate_sample.bandwidth
                 {
                     self.update_delivery_rate(rate_sample_bandwidth);
                 }
@@ -179,8 +169,7 @@ impl Rate {
     }
 
     pub fn update_app_limited(&mut self, v: bool) {
-        self.end_of_app_limited =
-            if v { self.last_sent_packet.max(1) } else { 0 };
+        self.end_of_app_limited = if v { self.last_sent_packet.max(1) } else { 0 };
     }
 
     pub fn app_limited(&mut self) -> bool {
@@ -242,17 +231,17 @@ impl RateSample {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::ops::Range;
 
-    use crate::packet;
-    use crate::ranges;
-    use crate::recovery::congestion::recovery::LegacyRecovery;
-    use crate::recovery::HandshakeStatus;
-    use crate::recovery::RecoveryOps;
-    use crate::test_utils;
+    use super::*;
     use crate::Config;
     use crate::OnAckReceivedOutcome;
-    use std::ops::Range;
+    use crate::packet;
+    use crate::ranges;
+    use crate::recovery::HandshakeStatus;
+    use crate::recovery::RecoveryOps;
+    use crate::recovery::congestion::recovery::LegacyRecovery;
+    use crate::test_utils;
 
     // A [RateSample](delivery_rate::RateSample) is app_limited if it was
     // generated when the [Rate](delivery_rate::Rate) was app_limited.
@@ -472,8 +461,11 @@ mod tests {
     }
 
     fn helper_send_and_ack_packets(
-        recovery: &mut LegacyRecovery, range: Range<u64>, now: Instant,
-        rtt: Duration, mss: usize,
+        recovery: &mut LegacyRecovery,
+        range: Range<u64>,
+        now: Instant,
+        rtt: Duration,
+        mss: usize,
     ) {
         for pn in range.clone() {
             let pkt = test_utils::helper_packet_sent(pn, now, mss);
@@ -504,11 +496,14 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(ack_outcome, OnAckReceivedOutcome {
-            lost_packets: 0,
-            lost_bytes: 0,
-            acked_bytes: mss * packet_count,
-            spurious_losses: 0,
-        });
+        assert_eq!(
+            ack_outcome,
+            OnAckReceivedOutcome {
+                lost_packets: 0,
+                lost_bytes: 0,
+                acked_bytes: mss * packet_count,
+                spurious_losses: 0,
+            }
+        );
     }
 }

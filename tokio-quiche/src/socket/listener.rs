@@ -35,11 +35,12 @@ use std::os::fd::BorrowedFd;
 #[cfg(unix)]
 use std::os::fd::RawFd;
 use std::sync::Arc;
+
 use tokio::net::UdpSocket;
 
 use super::SocketCapabilities;
-use crate::quic::SimpleConnectionIdGenerator;
 use crate::ConnectionIdGenerator;
+use crate::quic::SimpleConnectionIdGenerator;
 
 /// Wrapper around a [`UdpSocket`] for server-side QUIC connections.
 ///
@@ -69,8 +70,7 @@ impl QuicListener {
     /// See `SocketCapabilities::apply_all_and_get_compatibility` for details.
     #[cfg(target_os = "linux")]
     pub fn apply_max_capabilities(&mut self) {
-        let capabilities =
-            SocketCapabilities::apply_all_and_get_compatibility(&self.socket);
+        let capabilities = SocketCapabilities::apply_all_and_get_compatibility(&self.socket);
         self.capabilities = capabilities;
     }
 }

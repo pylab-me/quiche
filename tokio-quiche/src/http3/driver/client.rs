@@ -35,7 +35,6 @@ use quiche::h3;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 
-use super::datagram;
 use super::DriverHooks;
 use super::H3Command;
 use super::H3ConnectionError;
@@ -48,8 +47,9 @@ use super::InboundHeaders;
 use super::IncomingH3Headers;
 use super::OutboundFrameSender;
 use super::RequestSender;
-use super::StreamCtx;
 use super::STREAM_CAPACITY;
+use super::StreamCtx;
+use super::datagram;
 use crate::http3::settings::Http3Settings;
 use crate::quic::HandshakeInfo;
 use crate::quic::QuicCommand;
@@ -175,8 +175,7 @@ impl ClientHooks {
     fn is_retriable_send_error(err: &h3::Error) -> bool {
         matches!(
             err,
-            h3::Error::StreamBlocked |
-                h3::Error::TransportError(quiche::Error::StreamLimit)
+            h3::Error::StreamBlocked | h3::Error::TransportError(quiche::Error::StreamLimit)
         )
     }
 
@@ -188,32 +187,29 @@ impl ClientHooks {
     /// or `StreamLimit`), the request is pushed onto `queued_requests` and
     /// will be retried after [`BLOCKED_RETRY_DELAY`].
     fn initiate_request(
-        driver: &mut H3Driver<Self>, qconn: &mut QuicheConnection,
+        driver: &mut H3Driver<Self>,
+        qconn: &mut QuicheConnection,
         request: NewClientRequest,
     ) -> H3ConnectionResult<()> {
         let body_finished = request.body_writer.is_none();
 
-        let stream_id = match driver.conn_mut()?.send_request(
-            qconn,
-            &request.headers,
-            body_finished,
-        ) {
-            Ok(id) => id,
-            Err(ref err) if Self::is_retriable_send_error(err) => {
-                log::debug!(
-                    "send_request blocked, queuing for retry";
-                    "request_id" => request.request_id,
-                    "error" => %err,
-                );
-                driver.hooks.queued_requests.push_back(request);
-                return Ok(());
-            },
-            Err(err) => return Err(H3ConnectionError::from(err)),
-        };
+        let stream_id =
+            match driver.conn_mut()?.send_request(qconn, &request.headers, body_finished) {
+                Ok(id) => id,
+                Err(ref err) if Self::is_retriable_send_error(err) => {
+                    log::debug!(
+                        "send_request blocked, queuing for retry";
+                        "request_id" => request.request_id,
+                        "error" => %err,
+                    );
+                    driver.hooks.queued_requests.push_back(request);
+                    return Ok(());
+                }
+                Err(err) => return Err(H3ConnectionError::from(err)),
+            };
 
         // log::info!("sent h3 request"; "stream_id" => stream_id);
-        let (mut stream_ctx, send, recv) =
-            StreamCtx::new(stream_id, STREAM_CAPACITY);
+        let (mut stream_ctx, send, recv) = StreamCtx::new(stream_id, STREAM_CAPACITY);
 
         if body_finished {
             // `send_request()` already sent FIN for bodyless requests, so
@@ -221,9 +217,7 @@ impl ClientHooks {
             // since no body will be sent.
             stream_ctx.fin_or_reset_sent = true;
             stream_ctx.recv = None;
-            stream_ctx
-                .audit_stats
-                .set_sent_stream_fin(StreamClosureKind::Explicit);
+            stream_ctx.audit_stats.set_sent_stream_fin(StreamClosureKind::Explicit);
         }
 
         if let Some(quarter_stream_id) =
@@ -240,9 +234,7 @@ impl ClientHooks {
 
         if let Some(body_writer) = request.body_writer {
             let _ = body_writer.send(send.clone());
-            driver
-                .waiting_streams
-                .push(stream_ctx.wait_for_recv(stream_id));
+            driver.waiting_streams.push(stream_ctx.wait_for_recv(stream_id));
         }
 
         driver.insert_stream(stream_id, stream_ctx);
@@ -253,12 +245,10 @@ impl ClientHooks {
 
         // Notify the H3Controller that we've allocated a stream_id for a
         // given request_id.
-        let _ = driver
-            .h3_event_sender
-            .send(ClientH3Event::NewOutboundRequest {
-                stream_id,
-                request_id: request.request_id,
-            });
+        let _ = driver.h3_event_sender.send(ClientH3Event::NewOutboundRequest {
+            stream_id,
+            request_id: request.request_id,
+        });
 
         Ok(())
     }
@@ -266,7 +256,8 @@ impl ClientHooks {
     /// Handles a response from the peer by sending a relevant [`H3Event`] to
     /// the [ClientH3Controller] for application-level processing.
     fn handle_response(
-        driver: &mut H3Driver<Self>, headers: InboundHeaders,
+        driver: &mut H3Driver<Self>,
+        headers: InboundHeaders,
         pending_request: PendingClientRequest,
     ) -> H3ConnectionResult<()> {
         let InboundHeaders {
@@ -310,7 +301,8 @@ impl DriverHooks for ClientHooks {
     }
 
     fn conn_established(
-        driver: &mut H3Driver<Self>, qconn: &mut QuicheConnection,
+        driver: &mut H3Driver<Self>,
+        qconn: &mut QuicheConnection,
         _handshake_info: &HandshakeInfo,
     ) -> H3ConnectionResult<()> {
         assert!(
@@ -322,12 +314,11 @@ impl DriverHooks for ClientHooks {
     }
 
     fn headers_received(
-        driver: &mut H3Driver<Self>, _qconn: &mut QuicheConnection,
+        driver: &mut H3Driver<Self>,
+        _qconn: &mut QuicheConnection,
         headers: InboundHeaders,
     ) -> H3ConnectionResult<()> {
-        let Some(pending_request) =
-            driver.hooks.pending_requests.remove(&headers.stream_id)
-        else {
+        let Some(pending_request) = driver.hooks.pending_requests.remove(&headers.stream_id) else {
             // todo(fisher): better handling when an unknown stream_id is
             // encountered.
             return Ok(());
@@ -336,13 +327,13 @@ impl DriverHooks for ClientHooks {
     }
 
     fn conn_command(
-        driver: &mut H3Driver<Self>, qconn: &mut QuicheConnection,
+        driver: &mut H3Driver<Self>,
+        qconn: &mut QuicheConnection,
         cmd: Self::Command,
     ) -> H3ConnectionResult<()> {
         match cmd {
             ClientH3Command::Core(c) => driver.handle_core_command(qconn, c),
-            ClientH3Command::ClientRequest(req) =>
-                Self::initiate_request(driver, qconn, req),
+            ClientH3Command::ClientRequest(req) => Self::initiate_request(driver, qconn, req),
         }
     }
 
@@ -350,9 +341,7 @@ impl DriverHooks for ClientHooks {
         !driver.hooks.queued_requests.is_empty()
     }
 
-    async fn wait_for_action(
-        &mut self, qconn: &mut QuicheConnection,
-    ) -> H3ConnectionResult<()> {
+    async fn wait_for_action(&mut self, qconn: &mut QuicheConnection) -> H3ConnectionResult<()> {
         // Sleep briefly to let the peer open stream credit or raise the
         // MAX_STREAMS limit, then re-enqueue waiting requests back into
         // the driver's command channel so that `conn_command` can retry them

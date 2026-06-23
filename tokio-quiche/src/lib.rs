@@ -121,41 +121,38 @@ mod result;
 pub mod settings;
 pub mod socket;
 
-pub use datagram_socket;
-
-use foundations::telemetry::settings::LogVerbosity;
 use std::io;
 use std::sync::Arc;
 use std::sync::Once;
+
+pub use datagram_socket;
+use foundations::telemetry::settings::LogVerbosity;
 use tokio::net::UdpSocket;
 use tokio_stream::wrappers::ReceiverStream;
 
-use crate::metrics::Metrics;
-use crate::socket::QuicListener;
-
+pub use crate::http3::ClientH3Connection;
+pub use crate::http3::ServerH3Connection;
 pub use crate::http3::driver::ClientH3Controller;
 pub use crate::http3::driver::ClientH3Driver;
 pub use crate::http3::driver::ServerH3Controller;
 pub use crate::http3::driver::ServerH3Driver;
-pub use crate::http3::ClientH3Connection;
-pub use crate::http3::ServerH3Connection;
+use crate::metrics::Metrics;
 pub use crate::quic::connection::ApplicationOverQuic;
 pub use crate::quic::connection::ConnectionIdGenerator;
 pub use crate::quic::connection::InitialQuicConnection;
 pub use crate::quic::connection::QuicConnection;
 pub use crate::result::BoxError;
 pub use crate::result::QuicResult;
-pub use crate::settings::ConnectionParams;
-
 #[doc(hidden)]
 pub use crate::result::QuicResultExt;
+pub use crate::settings::ConnectionParams;
+use crate::socket::QuicListener;
 
 /// A stream of accepted [`InitialQuicConnection`]s from a [`listen`] call.
 ///
 /// Errors from processing the client's QUIC initials can also be emitted on
 /// this stream. These do not indicate that the listener itself has failed.
-pub type QuicConnectionStream<M> =
-    ReceiverStream<io::Result<InitialQuicConnection<UdpSocket, M>>>;
+pub type QuicConnectionStream<M> = ReceiverStream<io::Result<InitialQuicConnection<UdpSocket, M>>>;
 
 /// Starts listening for inbound QUIC connections on the given
 /// [`QuicListener`]s.
@@ -168,7 +165,8 @@ pub type QuicConnectionStream<M> =
 /// The task shuts down when the returned stream is closed (or dropped) and all
 /// previously-yielded connections are closed.
 pub fn listen_with_capabilities<M>(
-    sockets: impl IntoIterator<Item = QuicListener>, params: ConnectionParams,
+    sockets: impl IntoIterator<Item = QuicListener>,
+    params: ConnectionParams,
     metrics: M,
 ) -> io::Result<Vec<QuicConnectionStream<M>>>
 where
@@ -189,7 +187,9 @@ where
 /// Each socket is converted into a [`QuicListener`] with defaulted socket
 /// parameters. The listeners are then passed to [`listen_with_capabilities`].
 pub fn listen<S, M>(
-    sockets: impl IntoIterator<Item = S>, params: ConnectionParams, metrics: M,
+    sockets: impl IntoIterator<Item = S>,
+    params: ConnectionParams,
+    metrics: M,
 ) -> io::Result<Vec<QuicConnectionStream<M>>>
 where
     S: TryInto<QuicListener, Error = io::Error>,
@@ -231,8 +231,7 @@ pub(crate) fn capture_quiche_logs() {
         use foundations::telemetry::log as foundations_log;
         use log::Level as std_level;
 
-        let curr_logger =
-            Arc::clone(&foundations_log::slog_logger()).read().clone();
+        let curr_logger = Arc::clone(&foundations_log::slog_logger()).read().clone();
         let scope_guard = slog_scope::set_global_logger(curr_logger);
 
         // Convert slog::Level from Foundations settings to log::Level

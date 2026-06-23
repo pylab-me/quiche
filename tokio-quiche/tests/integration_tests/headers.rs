@@ -24,15 +24,14 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use crate::fixtures::*;
-
 use futures::SinkExt;
-
 use tokio_quiche::http3::driver::H3Event;
 use tokio_quiche::http3::driver::IncomingH3Headers;
 use tokio_quiche::http3::driver::OutboundFrame;
 use tokio_quiche::http3::driver::ServerH3Event;
 use tokio_quiche::quiche::h3::Header;
+
+use crate::fixtures::*;
 
 #[tokio::test]
 async fn test_additional_headers() {
@@ -47,10 +46,11 @@ async fn test_additional_headers() {
 
             while let Some(event) = event_rx.recv().await {
                 match event {
-                    ServerH3Event::Core(event) =>
+                    ServerH3Event::Core(event) => {
                         if let H3Event::ConnectionShutdown(_) = event {
                             break;
-                        },
+                        }
+                    }
 
                     ServerH3Event::Headers {
                         incoming_headers, ..
@@ -79,18 +79,14 @@ async fn test_additional_headers() {
                         .unwrap();
 
                         // Send fin
-                        send.send(OutboundFrame::Body(Default::default(), true))
-                            .await
-                            .unwrap();
-                    },
+                        send.send(OutboundFrame::Body(Default::default(), true)).await.unwrap();
+                    }
                 }
             }
         },
     );
 
-    let summary = h3i_fixtures::request(&url, 1)
-        .await
-        .expect("request failed");
+    let summary = h3i_fixtures::request(&url, 1).await.expect("request failed");
 
     let mut headers = summary.stream_map.headers_on_stream(0).into_iter();
 

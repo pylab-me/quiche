@@ -24,10 +24,10 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
 use std::time::Duration;
 
 use boring::ssl::BoxSelectCertFinish;
@@ -35,13 +35,11 @@ use boring::ssl::ClientHello;
 use boring::ssl::SslContextBuilder;
 use boring::ssl::SslFiletype;
 use boring::ssl::SslMethod;
-use h3i::actions::h3::send_headers_frame;
 use h3i::actions::h3::Action;
 use h3i::actions::h3::WaitType;
+use h3i::actions::h3::send_headers_frame;
 use h3i::quiche::ConnectionError;
-use h3i::quiche::{
-    self,
-};
+use h3i::quiche::{self};
 use tokio::net::UdpSocket;
 use tokio::time::timeout;
 use tokio_quiche::http3::driver::H3ConnectionError;
@@ -64,10 +62,10 @@ async fn test_handshake_duration_ioworker() {
 
     impl ConnectionHook for TestAsyncCallbackConnectionHook {
         fn create_custom_ssl_context_builder(
-            &self, _settings: TlsCertificatePaths<'_>,
+            &self,
+            _settings: TlsCertificatePaths<'_>,
         ) -> Option<SslContextBuilder> {
-            let mut ssl_ctx_builder =
-                SslContextBuilder::new(SslMethod::tls()).ok()?;
+            let mut ssl_ctx_builder = SslContextBuilder::new(SslMethod::tls()).ok()?;
             let cloned_bool = Arc::clone(&self.was_called);
 
             ssl_ctx_builder.set_async_select_certificate_callback(move |_| {
@@ -77,18 +75,13 @@ async fn test_handshake_duration_ioworker() {
                     // Pause during the handshake. Give some extra time to
                     // (hopefully) avoid flakiness.
                     tokio::time::sleep(HANDSHAKE_TIMEOUT.mul_f32(1.5)).await;
-                    Ok(Box::new(|_: ClientHello<'_>| Ok(()))
-                        as BoxSelectCertFinish)
+                    Ok(Box::new(|_: ClientHello<'_>| Ok(())) as BoxSelectCertFinish)
                 }))
             });
 
-            ssl_ctx_builder
-                .set_private_key_file(TEST_KEY_FILE, SslFiletype::PEM)
-                .unwrap();
+            ssl_ctx_builder.set_private_key_file(TEST_KEY_FILE, SslFiletype::PEM).unwrap();
 
-            ssl_ctx_builder
-                .set_certificate_chain_file(TEST_CERT_FILE)
-                .unwrap();
+            ssl_ctx_builder.set_certificate_chain_file(TEST_CERT_FILE).unwrap();
 
             Some(ssl_ctx_builder)
         }
@@ -209,11 +202,14 @@ async fn test_handshake_timeout_with_one_client_flight() {
     )
     .await;
 
-    assert_eq!(err.unwrap(), ConnectionError {
-        is_app: false,
-        error_code: quiche::WireErrorCode::ApplicationError as u64,
-        reason: vec![]
-    });
+    assert_eq!(
+        err.unwrap(),
+        ConnectionError {
+            is_app: false,
+            error_code: quiche::WireErrorCode::ApplicationError as u64,
+            reason: vec![]
+        }
+    );
 }
 
 #[tokio::test]
@@ -245,13 +241,11 @@ async fn test_post_accept_timeout() {
         move |mut h3_conn| {
             let counter = Arc::clone(&clone);
             async move {
-                let err =
-                    serve_connection_details(&mut h3_conn.h3_controller, counter)
-                        .await
-                        .expect_err("serve_connection didn't return an error");
-                let h3_err: &H3ConnectionError = err
-                    .downcast_ref()
-                    .expect("Didn't receive an H3ConnectionError error");
+                let err = serve_connection_details(&mut h3_conn.h3_controller, counter)
+                    .await
+                    .expect_err("serve_connection didn't return an error");
+                let h3_err: &H3ConnectionError =
+                    err.downcast_ref().expect("Didn't receive an H3ConnectionError error");
                 assert_eq!(h3_err, &H3ConnectionError::PostAcceptTimeout);
             }
         },
@@ -269,10 +263,7 @@ async fn test_post_accept_timeout() {
     // received.
     assert_eq!(request_counter.load(Ordering::SeqCst), 0);
 
-    let err = summary
-        .conn_close_details
-        .peer_error()
-        .expect("no error received");
+    let err = summary.conn_close_details.peer_error().expect("no error received");
     assert!(err.is_app);
     assert_eq!(err.error_code, quiche::h3::WireErrorCode::NoError as u64);
 }

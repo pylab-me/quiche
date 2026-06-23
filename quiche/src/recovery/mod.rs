@@ -28,24 +28,22 @@ use std::str::FromStr;
 use std::time::Duration;
 use std::time::Instant;
 
-use crate::frame;
-use crate::packet;
-use crate::ranges::RangeSet;
-pub(crate) use crate::recovery::bandwidth::Bandwidth;
-use crate::Config;
-use crate::Result;
-
+pub use gcongestion::BbrBwLoReductionStrategy;
+pub use gcongestion::BbrParams;
 #[cfg(feature = "qlog")]
 use qlog::events::EventData;
 #[cfg(feature = "qlog")]
 use serde::Serialize;
-
 use smallvec::SmallVec;
 
 use self::congestion::recovery::LegacyRecovery;
 use self::gcongestion::GRecovery;
-pub use gcongestion::BbrBwLoReductionStrategy;
-pub use gcongestion::BbrParams;
+use crate::Config;
+use crate::Result;
+use crate::frame;
+use crate::packet;
+use crate::ranges::RangeSet;
+pub(crate) use crate::recovery::bandwidth::Bandwidth;
 
 // Loss Recovery
 const INITIAL_PACKET_THRESHOLD: u64 = 3;
@@ -125,7 +123,7 @@ impl std::fmt::Debug for LossDetectionTimer {
                 } else {
                     write!(f, "exp")
                 }
-            },
+            }
             None => write!(f, "none"),
         }
     }
@@ -157,8 +155,7 @@ impl RecoveryConfig {
             hystart: config.hystart,
             pacing: config.pacing,
             max_pacing_rate: config.max_pacing_rate,
-            initial_congestion_window_packets: config
-                .initial_congestion_window_packets,
+            initial_congestion_window_packets: config.initial_congestion_window_packets,
             enable_relaxed_loss_threshold: config.enable_relaxed_loss_threshold,
             enable_cubic_idle_restart_fix: config.enable_cubic_idle_restart_fix,
         }
@@ -212,28 +209,44 @@ pub trait RecoveryOps {
     fn ping_sent(&mut self, epoch: packet::Epoch);
 
     fn on_packet_sent(
-        &mut self, pkt: Sent, epoch: packet::Epoch,
-        handshake_status: HandshakeStatus, now: Instant, trace_id: &str,
+        &mut self,
+        pkt: Sent,
+        epoch: packet::Epoch,
+        handshake_status: HandshakeStatus,
+        now: Instant,
+        trace_id: &str,
     );
     fn get_packet_send_time(&self, now: Instant) -> Instant;
 
     #[allow(clippy::too_many_arguments)]
     fn on_ack_received(
-        &mut self, ranges: &RangeSet, ack_delay: u64, epoch: packet::Epoch,
-        handshake_status: HandshakeStatus, now: Instant, skip_pn: Option<u64>,
+        &mut self,
+        ranges: &RangeSet,
+        ack_delay: u64,
+        epoch: packet::Epoch,
+        handshake_status: HandshakeStatus,
+        now: Instant,
+        skip_pn: Option<u64>,
         trace_id: &str,
     ) -> Result<OnAckReceivedOutcome>;
 
     fn on_loss_detection_timeout(
-        &mut self, handshake_status: HandshakeStatus, now: Instant,
+        &mut self,
+        handshake_status: HandshakeStatus,
+        now: Instant,
         trace_id: &str,
     ) -> OnLossDetectionTimeoutOutcome;
     fn on_pkt_num_space_discarded(
-        &mut self, epoch: packet::Epoch, handshake_status: HandshakeStatus,
+        &mut self,
+        epoch: packet::Epoch,
+        handshake_status: HandshakeStatus,
         now: Instant,
     );
     fn on_path_change(
-        &mut self, epoch: packet::Epoch, now: Instant, _trace_id: &str,
+        &mut self,
+        epoch: packet::Epoch,
+        now: Instant,
+        _trace_id: &str,
     ) -> (usize, usize);
     fn loss_detection_timer(&self) -> Option<Instant>;
     fn cwnd(&self) -> usize;
@@ -302,7 +315,9 @@ pub trait RecoveryOps {
 
     #[cfg(test)]
     fn detect_lost_packets_for_test(
-        &mut self, epoch: packet::Epoch, now: Instant,
+        &mut self,
+        epoch: packet::Epoch,
+        now: Instant,
     ) -> (usize, usize);
 
     fn update_app_limited(&mut self, v: bool);
@@ -318,8 +333,7 @@ pub trait RecoveryOps {
     fn get_updated_qlog_event_data(&mut self) -> Option<EventData>;
 
     #[cfg(feature = "qlog")]
-    fn get_updated_qlog_cc_state(&mut self, now: Instant)
-        -> Option<&'static str>;
+    fn get_updated_qlog_cc_state(&mut self, now: Instant) -> Option<&'static str>;
 
     fn send_quantum(&self) -> usize;
 
@@ -339,21 +353,18 @@ impl Recovery {
     }
 
     #[cfg(feature = "qlog")]
-    pub fn maybe_qlog(
-        &mut self, qlog: &mut qlog::streamer::QlogStreamer, now: Instant,
-    ) {
+    pub fn maybe_qlog(&mut self, qlog: &mut qlog::streamer::QlogStreamer, now: Instant) {
         if let Some(ev_data) = self.get_updated_qlog_event_data() {
             qlog.add_event_data_with_instant(ev_data, now).ok();
         }
 
         if let Some(cc_state) = self.get_updated_qlog_cc_state(now) {
-            let ev_data = EventData::QuicCongestionStateUpdated(
-                qlog::events::quic::CongestionStateUpdated {
+            let ev_data =
+                EventData::QuicCongestionStateUpdated(qlog::events::quic::CongestionStateUpdated {
                     old: None,
                     new: cc_state.to_string(),
                     trigger: None,
-                },
-            );
+                });
 
             qlog.add_event_data_with_instant(ev_data, now).ok();
         }
@@ -373,9 +384,9 @@ impl Recovery {
 #[repr(C)]
 pub enum CongestionControlAlgorithm {
     /// Reno congestion control algorithm. `reno` in a string form.
-    Reno            = 0,
+    Reno = 0,
     /// CUBIC congestion control algorithm (default). `cubic` in a string form.
-    CUBIC           = 1,
+    CUBIC = 1,
     /// BBRv2 congestion control algorithm implementation from gcongestion
     /// branch. `bbr2_gcongestion` in a string form.
     Bbr2Gcongestion = 4,
@@ -546,8 +557,7 @@ impl CfExData {
 
     fn insert<T: Serialize>(&mut self, name: &'static str, value: T) {
         let field = CustomQlogField::new(name, value);
-        self.0
-            .insert(field.name().to_string(), field.as_json_value());
+        self.0.insert(field.name().to_string(), field.as_json_value());
     }
 
     fn into_inner(self) -> qlog::events::ExData {
@@ -605,14 +615,13 @@ impl QlogMetrics {
             None
         };
 
-        let new_bytes_in_flight =
-            if self.bytes_in_flight != latest.bytes_in_flight {
-                self.bytes_in_flight = latest.bytes_in_flight;
-                emit_event = true;
-                Some(latest.bytes_in_flight)
-            } else {
-                None
-            };
+        let new_bytes_in_flight = if self.bytes_in_flight != latest.bytes_in_flight {
+            self.bytes_in_flight = latest.bytes_in_flight;
+            emit_event = true;
+            Some(latest.bytes_in_flight)
+        } else {
+            None
+        };
 
         let new_ssthresh = if self.ssthresh != latest.ssthresh {
             self.ssthresh = latest.ssthresh;
@@ -630,14 +639,13 @@ impl QlogMetrics {
             None
         };
 
-        let new_pto_count =
-            if latest.pto_count.is_some() && self.pto_count != latest.pto_count {
-                self.pto_count = latest.pto_count;
-                emit_event = true;
-                latest.pto_count.map(|v| v as u16)
-            } else {
-                None
-            };
+        let new_pto_count = if latest.pto_count.is_some() && self.pto_count != latest.pto_count {
+            self.pto_count = latest.pto_count;
+            emit_event = true;
+            latest.pto_count.map(|v| v as u16)
+        } else {
+            None
+        };
 
         // Build ex_data for rate metrics
         let mut ex_data = CfExData::new();
@@ -666,20 +674,26 @@ impl QlogMetrics {
         if self.lost_packets != latest.lost_packets {
             if let Some(val) = latest.lost_packets {
                 emit_event = true;
-                ex_data.insert("cf_lost_packets", TotalAndDelta {
-                    total: latest.lost_packets,
-                    delta: Some(val - self.lost_packets.unwrap_or(0)),
-                });
+                ex_data.insert(
+                    "cf_lost_packets",
+                    TotalAndDelta {
+                        total: latest.lost_packets,
+                        delta: Some(val - self.lost_packets.unwrap_or(0)),
+                    },
+                );
                 self.lost_packets = latest.lost_packets;
             }
         }
         if self.lost_bytes != latest.lost_bytes {
             if let Some(val) = latest.lost_bytes {
                 emit_event = true;
-                ex_data.insert("cf_lost_bytes", TotalAndDelta {
-                    total: latest.lost_bytes,
-                    delta: Some(val - self.lost_bytes.unwrap_or(0)),
-                });
+                ex_data.insert(
+                    "cf_lost_bytes",
+                    TotalAndDelta {
+                        total: latest.lost_bytes,
+                        delta: Some(val - self.lost_bytes.unwrap_or(0)),
+                    },
+                );
                 self.lost_bytes = latest.lost_bytes;
             }
         }
@@ -724,7 +738,7 @@ impl ReleaseTime {
     /// Add the specific delay to the current time
     fn inc(&mut self, delay: Duration) {
         match self {
-            ReleaseTime::Immediate => {},
+            ReleaseTime::Immediate => {}
             ReleaseTime::At(time) => *time += delay,
         }
     }
@@ -800,9 +814,7 @@ pub struct StartupExit {
 }
 
 impl StartupExit {
-    fn new(
-        cwnd: usize, bandwidth: Option<Bandwidth>, reason: StartupExitReason,
-    ) -> Self {
+    fn new(cwnd: usize, bandwidth: Option<Bandwidth>, reason: StartupExitReason) -> Self {
         let bandwidth = bandwidth.map(Bandwidth::to_bytes_per_second);
         Self {
             cwnd,
@@ -830,15 +842,17 @@ pub enum StartupExitReason {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
+    use rstest::rstest;
+    use smallvec::smallvec;
+
     use super::*;
+    use crate::CongestionControlAlgorithm;
+    use crate::DEFAULT_INITIAL_RTT;
     use crate::packet;
     use crate::range_buf::RangeBuf;
     use crate::test_utils;
-    use crate::CongestionControlAlgorithm;
-    use crate::DEFAULT_INITIAL_RTT;
-    use rstest::rstest;
-    use smallvec::smallvec;
-    use std::str::FromStr;
 
     fn recovery_for_alg(algo: CongestionControlAlgorithm) -> Recovery {
         let mut cfg = Config::new(crate::PROTOCOL_VERSION).unwrap();
@@ -864,8 +878,7 @@ mod tests {
         assert_eq!(algo, CongestionControlAlgorithm::Bbr2Gcongestion);
         assert!(recovery_for_alg(algo).gcongestion_enabled());
 
-        let algo =
-            CongestionControlAlgorithm::from_str("bbr2_gcongestion").unwrap();
+        let algo = CongestionControlAlgorithm::from_str("bbr2_gcongestion").unwrap();
         assert_eq!(algo, CongestionControlAlgorithm::Bbr2Gcongestion);
         assert!(recovery_for_alg(algo).gcongestion_enabled());
     }
@@ -879,9 +892,7 @@ mod tests {
     }
 
     #[rstest]
-    fn loss_on_pto(
-        #[values("reno", "cubic", "bbr2_gcongestion")] cc_algorithm_name: &str,
-    ) {
+    fn loss_on_pto(#[values("reno", "cubic", "bbr2_gcongestion")] cc_algorithm_name: &str) {
         let mut cfg = Config::new(crate::PROTOCOL_VERSION).unwrap();
         assert_eq!(cfg.set_cc_algorithm_name(cc_algorithm_name), Ok(()));
 
@@ -1165,9 +1176,7 @@ mod tests {
     }
 
     #[rstest]
-    fn loss_on_timer(
-        #[values("reno", "cubic", "bbr2_gcongestion")] cc_algorithm_name: &str,
-    ) {
+    fn loss_on_timer(#[values("reno", "cubic", "bbr2_gcongestion")] cc_algorithm_name: &str) {
         let mut cfg = Config::new(crate::PROTOCOL_VERSION).unwrap();
         assert_eq!(cfg.set_cc_algorithm_name(cc_algorithm_name), Ok(()));
 
@@ -1361,9 +1370,7 @@ mod tests {
     }
 
     #[rstest]
-    fn loss_on_reordering(
-        #[values("reno", "cubic", "bbr2_gcongestion")] cc_algorithm_name: &str,
-    ) {
+    fn loss_on_reordering(#[values("reno", "cubic", "bbr2_gcongestion")] cc_algorithm_name: &str) {
         let mut cfg = Config::new(crate::PROTOCOL_VERSION).unwrap();
         assert_eq!(cfg.set_cc_algorithm_name(cc_algorithm_name), Ok(()));
 
@@ -1481,9 +1488,7 @@ mod tests {
     // given the different algorithms but it would be ideal to merge and share
     // the logic.
     #[rstest]
-    fn time_thresholds_on_reordering(
-        #[values("bbr2_gcongestion")] cc_algorithm_name: &str,
-    ) {
+    fn time_thresholds_on_reordering(#[values("bbr2_gcongestion")] cc_algorithm_name: &str) {
         let mut cfg = Config::new(crate::PROTOCOL_VERSION).unwrap();
         assert_eq!(cfg.set_cc_algorithm_name(cc_algorithm_name), Ok(()));
 
@@ -1502,12 +1507,11 @@ mod tests {
         //      | ................ | ..................... |
         //            THRESH_GAP         THRESH_GAP
         // ```
-        // 
+        //
         // Threshold gap time.
         const THRESH_GAP: Duration = Duration::from_millis(30);
         // Initial time theshold based on inital RTT.
-        let initial_thresh_ms =
-            DEFAULT_INITIAL_RTT.mul_f64(INITIAL_TIME_THRESHOLD);
+        let initial_thresh_ms = DEFAULT_INITIAL_RTT.mul_f64(INITIAL_TIME_THRESHOLD);
         // The time threshold after spurious loss.
         let spurious_thresh_ms: Duration =
             DEFAULT_INITIAL_RTT.mul_f64(PACKET_REORDER_TIME_THRESHOLD);
@@ -1655,9 +1659,7 @@ mod tests {
     // TODO: Implement enable_relaxed_loss_threshold and enable this test for the
     // congestion module.
     #[rstest]
-    fn relaxed_thresholds_on_reordering(
-        #[values("bbr2_gcongestion")] cc_algorithm_name: &str,
-    ) {
+    fn relaxed_thresholds_on_reordering(#[values("bbr2_gcongestion")] cc_algorithm_name: &str) {
         let mut cfg = Config::new(crate::PROTOCOL_VERSION).unwrap();
         cfg.enable_relaxed_loss_threshold = true;
         assert_eq!(cfg.set_cc_algorithm_name(cc_algorithm_name), Ok(()));
@@ -1680,8 +1682,7 @@ mod tests {
         // Threshold gap time.
         const THRESH_GAP: Duration = Duration::from_millis(30);
         // Initial time theshold based on inital RTT.
-        let initial_thresh_ms =
-            DEFAULT_INITIAL_RTT.mul_f64(INITIAL_TIME_THRESHOLD);
+        let initial_thresh_ms = DEFAULT_INITIAL_RTT.mul_f64(INITIAL_TIME_THRESHOLD);
         // The time threshold after spurious loss.
         let spurious_thresh_ms: Duration =
             DEFAULT_INITIAL_RTT.mul_f64(PACKET_REORDER_TIME_THRESHOLD);
@@ -1841,8 +1842,7 @@ mod tests {
         //
         // Time threshold overhead should double.
         assert_eq!(r.pkt_thresh(), None);
-        let double_time_thresh_overhead =
-            1.0 + 2.0 * INITIAL_TIME_THRESHOLD_OVERHEAD;
+        let double_time_thresh_overhead = 1.0 + 2.0 * INITIAL_TIME_THRESHOLD_OVERHEAD;
         assert_eq!(r.time_thresh(), double_time_thresh_overhead);
     }
 
@@ -1851,8 +1851,7 @@ mod tests {
         #[values("reno", "cubic", "bbr2_gcongestion")] cc_algorithm_name: &str,
         #[values(false, true)] time_sent_set_to_now: bool,
     ) {
-        let pacing_enabled = cc_algorithm_name == "bbr2" ||
-            cc_algorithm_name == "bbr2_gcongestion";
+        let pacing_enabled = cc_algorithm_name == "bbr2" || cc_algorithm_name == "bbr2_gcongestion";
 
         let mut cfg = Config::new(crate::PROTOCOL_VERSION).unwrap();
         assert_eq!(cfg.set_cc_algorithm_name(cc_algorithm_name), Ok(()));
@@ -2075,9 +2074,7 @@ mod tests {
         assert_eq!(
             r.get_packet_send_time(now) - now,
             if pacing_enabled {
-                Duration::from_secs_f64(
-                    scale_factor * 12000.0 / pacing_rate as f64,
-                )
+                Duration::from_secs_f64(scale_factor * 12000.0 / pacing_rate as f64)
             } else {
                 Duration::ZERO
             }
@@ -2141,14 +2138,12 @@ mod tests {
         // When enabled, the pacer adds a 25msec delay to the packet
         // sends which will be applied to the sent times tracked by
         // the recovery module, bringing down RTT to 15msec.
-        let expected_min_rtt = if pacing_enabled &&
-            !time_sent_set_to_now &&
-            cfg!(feature = "internal")
-        {
-            reduced_rtt - Duration::from_millis(25)
-        } else {
-            reduced_rtt
-        };
+        let expected_min_rtt =
+            if pacing_enabled && !time_sent_set_to_now && cfg!(feature = "internal") {
+                reduced_rtt - Duration::from_millis(25)
+            } else {
+                reduced_rtt
+            };
 
         assert_eq!(r.sent_packets_len(packet::Epoch::Application), 1);
         assert_eq!(r.bytes_in_flight(), 1000);
@@ -2182,14 +2177,12 @@ mod tests {
 
         // Pacer adds 50msec delay to the second packet, resulting in
         // an effective RTT of 0.
-        let expected_min_rtt = if pacing_enabled &&
-            !time_sent_set_to_now &&
-            cfg!(feature = "internal")
-        {
-            Duration::from_millis(0)
-        } else {
-            reduced_rtt
-        };
+        let expected_min_rtt =
+            if pacing_enabled && !time_sent_set_to_now && cfg!(feature = "internal") {
+                Duration::from_millis(0)
+            } else {
+                reduced_rtt
+            };
         assert_eq!(r.sent_packets_len(packet::Epoch::Application), 0);
         assert_eq!(r.bytes_in_flight(), 0);
         assert_eq!(r.bytes_in_flight_duration(), initial_rtt + reduced_rtt);
@@ -2214,7 +2207,8 @@ mod tests {
     #[case::bw_estimate_increase_after_first_rtt(0.5, 0.5)]
     #[cfg(feature = "internal")]
     fn initial_pacing_rate_override(
-        #[case] initial_multipler: f64, #[case] expected_multiplier: f64,
+        #[case] initial_multipler: f64,
+        #[case] expected_multiplier: f64,
     ) {
         let rtt = Duration::from_millis(50);
         let bw = Bandwidth::from_bytes_and_time_delta(12000, rtt);
@@ -2333,16 +2327,8 @@ mod tests {
         acked.insert(0..2);
 
         assert_eq!(
-            r.on_ack_received(
-                &acked,
-                25,
-                epoch,
-                HandshakeStatus::default(),
-                now,
-                None,
-                "",
-            )
-            .unwrap(),
+            r.on_ack_received(&acked, 25, epoch, HandshakeStatus::default(), now, None, "",)
+                .unwrap(),
             OnAckReceivedOutcome {
                 lost_packets: 0,
                 lost_bytes: 0,
@@ -2361,16 +2347,8 @@ mod tests {
         let mut acked = RangeSet::default();
         acked.insert(0..10);
         assert_eq!(
-            r.on_ack_received(
-                &acked,
-                25,
-                epoch,
-                HandshakeStatus::default(),
-                now,
-                None,
-                "",
-            )
-            .unwrap(),
+            r.on_ack_received(&acked, 25, epoch, HandshakeStatus::default(), now, None, "",)
+                .unwrap(),
             OnAckReceivedOutcome {
                 lost_packets: 0,
                 lost_bytes: 0,
@@ -2386,9 +2364,7 @@ mod tests {
     }
 
     #[rstest]
-    fn pmtud_loss_on_timer(
-        #[values("reno", "cubic", "bbr2_gcongestion")] cc_algorithm_name: &str,
-    ) {
+    fn pmtud_loss_on_timer(#[values("reno", "cubic", "bbr2_gcongestion")] cc_algorithm_name: &str) {
         let mut cfg = Config::new(crate::PROTOCOL_VERSION).unwrap();
         assert_eq!(cfg.set_cc_algorithm_name(cc_algorithm_name), Ok(()));
 
@@ -2556,9 +2532,7 @@ mod tests {
     // Modeling delivery_rate for gcongestion is non-trivial so we only test the
     // congestion specific algorithms.
     #[rstest]
-    fn congestion_delivery_rate(
-        #[values("reno", "cubic", "bbr2")] cc_algorithm_name: &str,
-    ) {
+    fn congestion_delivery_rate(#[values("reno", "cubic", "bbr2")] cc_algorithm_name: &str) {
         let mut cfg = Config::new(crate::PROTOCOL_VERSION).unwrap();
         assert_eq!(cfg.set_cc_algorithm_name(cc_algorithm_name), Ok(()));
 
@@ -2744,18 +2718,12 @@ mod tests {
             assert_eq!(r.startup_exit(), None, "{iter}");
 
             // Unchanged metrics.
-            assert_eq!(
-                r.sent_packets_len(packet::Epoch::Application),
-                0,
-                "{iter}"
-            );
+            assert_eq!(r.sent_packets_len(packet::Epoch::Application), 0, "{iter}");
             assert_eq!(r.bytes_in_flight(), 0, "{iter}");
             assert_eq!(r.bytes_in_flight_duration(), rtt, "{iter}");
             assert_eq!(
                 r.pacing_rate(),
-                if cc_algorithm_name == "bbr2_gcongestion" ||
-                    cc_algorithm_name == "bbr2"
-                {
+                if cc_algorithm_name == "bbr2_gcongestion" || cc_algorithm_name == "bbr2" {
                     120000
                 } else {
                     0
@@ -2799,13 +2767,7 @@ mod tests {
             has_data: false,
             is_pmtud_probe: false,
         };
-        r.on_packet_sent(
-            p_initial,
-            packet::Epoch::Initial,
-            handshake_status,
-            now,
-            "",
-        );
+        r.on_packet_sent(p_initial, packet::Epoch::Initial, handshake_status, now, "");
 
         // The timer should now be set for the Initial packet.
         assert!(r.loss_detection_timer().is_some());
@@ -2830,13 +2792,7 @@ mod tests {
             has_data: true,
             is_pmtud_probe: false,
         };
-        r.on_packet_sent(
-            p_app,
-            packet::Epoch::Application,
-            handshake_status,
-            now,
-            "",
-        );
+        r.on_packet_sent(p_app, packet::Epoch::Application, handshake_status, now, "");
 
         // 3. Acknowledge the Initial packet.
         // This empties the Initial space, but Application space still has data in
@@ -2916,8 +2872,7 @@ mod tests {
         r.on_loss_detection_timeout(HandshakeStatus::default(), now, "");
 
         assert_eq!(r.pto_count(), 1);
-        let frames_after_first_pto =
-            r.lost_frames_count(packet::Epoch::Application);
+        let frames_after_first_pto = r.lost_frames_count(packet::Epoch::Application);
         assert_eq!(
             frames_after_first_pto, 1,
             "First PTO should add exactly 1 frame"
@@ -2935,8 +2890,7 @@ mod tests {
         r.on_loss_detection_timeout(HandshakeStatus::default(), now, "");
 
         assert_eq!(r.pto_count(), 2);
-        let frames_after_second_pto =
-            r.lost_frames_count(packet::Epoch::Application);
+        let frames_after_second_pto = r.lost_frames_count(packet::Epoch::Application);
         assert_eq!(
             frames_after_second_pto, frames_after_first_pto,
             "Second PTO must NOT add duplicate frames (fix: `if \
@@ -2948,8 +2902,7 @@ mod tests {
         r.on_loss_detection_timeout(HandshakeStatus::default(), now, "");
 
         assert_eq!(r.pto_count(), 3);
-        let frames_after_third_pto =
-            r.lost_frames_count(packet::Epoch::Application);
+        let frames_after_third_pto = r.lost_frames_count(packet::Epoch::Application);
         assert_eq!(
             frames_after_third_pto, frames_after_first_pto,
             "Third PTO must NOT add duplicate frames"
@@ -2984,13 +2937,7 @@ mod tests {
         assert!(len1 > 0);
 
         // Verify lost_count is 0 (no losses yet)
-        let initial_lost_count = pipe
-            .client
-            .paths
-            .get_active()
-            .unwrap()
-            .recovery
-            .lost_count();
+        let initial_lost_count = pipe.client.paths.get_active().unwrap().recovery.lost_count();
         assert_eq!(initial_lost_count, 0, "No packets should be lost initially");
 
         // Verify frames are not yet in lost_frames
@@ -3027,13 +2974,7 @@ mod tests {
         );
 
         // But lost_count should still be 0 (PTO doesn't declare packets lost)
-        let lost_count_after_pto = pipe
-            .client
-            .paths
-            .get_active()
-            .unwrap()
-            .recovery
-            .lost_count();
+        let lost_count_after_pto = pipe.client.paths.get_active().unwrap().recovery.lost_count();
         assert_eq!(
             lost_count_after_pto, 0,
             "PTO should not increment lost_count"
@@ -3044,13 +2985,7 @@ mod tests {
         assert!(len2 > 0, "Should send PTO probe packet");
 
         // After sending, lost_count should still be 0
-        let lost_count_after_send = pipe
-            .client
-            .paths
-            .get_active()
-            .unwrap()
-            .recovery
-            .lost_count();
+        let lost_count_after_send = pipe.client.paths.get_active().unwrap().recovery.lost_count();
         assert_eq!(
             lost_count_after_send, 0,
             "Sending PTO probe should not increment lost_count"
@@ -3065,13 +3000,7 @@ mod tests {
         assert_eq!(&recv_buf[..5], b"hello");
 
         // Final verification: lost_count on client should still be 0
-        let final_lost_count = pipe
-            .client
-            .paths
-            .get_active()
-            .unwrap()
-            .recovery
-            .lost_count();
+        let final_lost_count = pipe.client.paths.get_active().unwrap().recovery.lost_count();
         assert_eq!(
             final_lost_count, 0,
             "No packets should be marked as lost - PTO only retransmits"

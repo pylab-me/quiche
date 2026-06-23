@@ -29,14 +29,12 @@ use std::task::Context;
 use std::task::Poll;
 use std::time::Duration;
 
-use crate::http3::driver::H3ConnectionError;
-use crate::quic::QuicheConnection;
-
 use foundations::telemetry::log;
 use tokio_util::time::delay_queue::DelayQueue;
-use tokio_util::time::delay_queue::{
-    self,
-};
+use tokio_util::time::delay_queue::{self};
+
+use crate::http3::driver::H3ConnectionError;
+use crate::quic::QuicheConnection;
 
 /// Unified configuration parameters for
 /// [H3Driver](crate::http3::driver::H3Driver)s.
@@ -126,9 +124,7 @@ impl Http3SettingsEnforcer {
     }
 
     /// Registers a timeout of `typ` in this [Http3SettingsEnforcer].
-    pub fn add_timeout(
-        &mut self, typ: Http3TimeoutType, duration: Duration,
-    ) -> TimeoutKey {
+    pub fn add_timeout(&mut self, typ: Http3TimeoutType, duration: Duration) -> TimeoutKey {
         let key = self.timeouts.delay_queue.insert(typ, duration);
         TimeoutKey(key)
     }
@@ -144,9 +140,7 @@ impl Http3SettingsEnforcer {
         let mut changed = false;
         let mut result = TimeoutCheckResult::default();
 
-        while let Poll::Ready(Some(exp)) =
-            self.timeouts.delay_queue.poll_expired(cx)
-        {
+        while let Poll::Ready(Some(exp)) = self.timeouts.delay_queue.poll_expired(cx) {
             changed |= result.set_expired(exp.into_inner());
         }
 
@@ -161,7 +155,8 @@ impl Http3SettingsEnforcer {
     /// This function will automatically call `close()` on the underlying
     /// [quiche::Connection].
     pub async fn enforce_timeouts(
-        &mut self, qconn: &mut QuicheConnection,
+        &mut self,
+        qconn: &mut QuicheConnection,
     ) -> Result<(), H3ConnectionError> {
         let result = poll_fn(|cx| self.poll_timeouts(cx)).await;
 

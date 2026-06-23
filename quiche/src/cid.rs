@@ -24,18 +24,16 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use crate::Error;
-use crate::Result;
 use std::cmp;
-
-use crate::frame;
-
-use crate::packet::ConnectionId;
-
 use std::collections::HashSet;
 use std::collections::VecDeque;
 
 use smallvec::SmallVec;
+
+use crate::Error;
+use crate::Result;
+use crate::frame;
+use crate::packet::ConnectionId;
 
 /// Used to calculate the cap for the queue of retired connection IDs for which
 /// a RETIRED_CONNECTION_ID frame have not been sent, as a multiple of
@@ -166,7 +164,7 @@ impl BoundedNonEmptyConnectionIdVecDeque {
                     return Err(Error::IdLimit);
                 }
                 self.inner.push_back(e);
-            },
+            }
         };
         Ok(())
     }
@@ -244,8 +242,10 @@ impl ConnectionIdentifiers {
     /// connection ID limit and initial source Connection ID. The destination
     /// Connection ID is set to the empty one.
     pub fn new(
-        mut destination_conn_id_limit: usize, initial_scid: &ConnectionId,
-        initial_path_id: usize, reset_token: Option<u128>,
+        mut destination_conn_id_limit: usize,
+        initial_scid: &ConnectionId,
+        initial_path_id: usize,
+        reset_token: Option<u128>,
     ) -> ConnectionIdentifiers {
         // It must be at least 2.
         if destination_conn_id_limit < 2 {
@@ -258,8 +258,7 @@ impl ConnectionIdentifiers {
         // Record the zero-length SCID status.
         let zero_length_scid = initial_scid.is_empty();
 
-        let initial_scid =
-            ConnectionId::from_ref(initial_scid.as_ref()).into_owned();
+        let initial_scid = ConnectionId::from_ref(initial_scid.as_ref()).into_owned();
 
         // We need to track up to (2 * source_conn_id_limit - 1) source
         // Connection IDs when the host wants to force their renewal.
@@ -284,8 +283,7 @@ impl ConnectionIdentifiers {
         );
 
         // Guard against overflow.
-        let value =
-            (destination_conn_id_limit as u64) * RETIRED_CONN_ID_LIMIT_MULTIPLIER;
+        let value = (destination_conn_id_limit as u64) * RETIRED_CONN_ID_LIMIT_MULTIPLIER;
         let size = cmp::min(usize::MAX as u64, value) as usize;
         // Because we already inserted the initial SCID.
         let next_scid_seq = 1;
@@ -357,8 +355,12 @@ impl ConnectionIdentifiers {
     /// [`InvalidState`]: enum.Error.html#InvalidState
     /// [`IdLimit`]: enum.Error.html#IdLimit
     pub fn new_scid(
-        &mut self, cid: ConnectionId<'static>, reset_token: Option<u128>,
-        advertise: bool, path_id: Option<usize>, retire_if_needed: bool,
+        &mut self,
+        cid: ConnectionId<'static>,
+        reset_token: Option<u128>,
+        advertise: bool,
+        path_id: Option<usize>,
+        retire_if_needed: bool,
     ) -> Result<u64> {
         if self.zero_length_scid {
             return Err(Error::InvalidState);
@@ -406,7 +408,9 @@ impl ConnectionIdentifiers {
 
     /// Sets the initial destination identifier.
     pub fn set_initial_dcid(
-        &mut self, cid: ConnectionId<'static>, reset_token: Option<u128>,
+        &mut self,
+        cid: ConnectionId<'static>,
+        reset_token: Option<u128>,
         path_id: Option<usize>,
     ) {
         // Record the zero-length DCID status.
@@ -429,8 +433,12 @@ impl ConnectionIdentifiers {
     /// sequence number of retired DCIDs that were linked to their respective
     /// Path ID.
     pub fn new_dcid(
-        &mut self, cid: ConnectionId<'static>, seq: u64, reset_token: u128,
-        retire_prior_to: u64, retired_path_ids: &mut SmallVec<[(u64, usize); 1]>,
+        &mut self,
+        cid: ConnectionId<'static>,
+        seq: u64,
+        reset_token: u128,
+        retire_prior_to: u64,
+        retired_path_ids: &mut SmallVec<[(u64, usize); 1]>,
     ) -> Result<()> {
         if self.zero_length_dcid {
             return Err(Error::InvalidState);
@@ -442,10 +450,8 @@ impl ConnectionIdentifiers {
         // sequence number is used for different connection IDs, the endpoint
         // MAY treat that receipt as a connection error of type
         // PROTOCOL_VIOLATION.
-        if let Some(e) = self.dcids.iter().find(|e| e.cid == cid || e.seq == seq)
-        {
-            if e.cid != cid || e.seq != seq || e.reset_token != Some(reset_token)
-            {
+        if let Some(e) = self.dcids.iter().find(|e| e.cid == cid || e.seq == seq) {
+            if e.cid != cid || e.seq != seq || e.reset_token != Some(reset_token) {
                 return Err(Error::InvalidFrame);
             }
             // The identifier is already there, nothing to do.
@@ -503,10 +509,7 @@ impl ConnectionIdentifiers {
 
             // To avoid exceeding the capacity of the inner `VecDeque`, we first
             // remove the elements and then insert the new one.
-            let index = self
-                .dcids
-                .inner
-                .partition_point(|e| e.seq < retire_prior_to);
+            let index = self.dcids.inner.partition_point(|e| e.seq < retire_prior_to);
 
             for e in self.dcids.inner.drain(..index) {
                 if let Some(pid) = e.path_id {
@@ -547,9 +550,7 @@ impl ConnectionIdentifiers {
     /// Returns the path ID that was associated to the retired CID, if any.
     ///
     /// [`InvalidState`]: enum.Error.html#InvalidState
-    pub fn retire_scid(
-        &mut self, seq: u64, pkt_dcid: &ConnectionId,
-    ) -> Result<Option<usize>> {
+    pub fn retire_scid(&mut self, seq: u64, pkt_dcid: &ConnectionId) -> Result<Option<usize>> {
         if seq >= self.next_scid_seq {
             return Err(Error::InvalidState);
         }
@@ -606,9 +607,7 @@ impl ConnectionIdentifiers {
 
     /// Updates the Source Connection ID entry with the provided sequence number
     /// to indicate that it is now linked to the provided path ID.
-    pub fn link_scid_to_path_id(
-        &mut self, dcid_seq: u64, path_id: usize,
-    ) -> Result<()> {
+    pub fn link_scid_to_path_id(&mut self, dcid_seq: u64, path_id: usize) -> Result<()> {
         let e = self.scids.get_mut(dcid_seq).ok_or(Error::InvalidState)?;
         e.path_id = Some(path_id);
         Ok(())
@@ -616,9 +615,7 @@ impl ConnectionIdentifiers {
 
     /// Updates the Destination Connection ID entry with the provided sequence
     /// number to indicate that it is now linked to the provided path ID.
-    pub fn link_dcid_to_path_id(
-        &mut self, dcid_seq: u64, path_id: usize,
-    ) -> Result<()> {
+    pub fn link_dcid_to_path_id(&mut self, dcid_seq: u64, path_id: usize) -> Result<()> {
         let e = self.dcids.get_mut(dcid_seq).ok_or(Error::InvalidState)?;
         e.path_id = Some(path_id);
         Ok(())
@@ -660,9 +657,7 @@ impl ConnectionIdentifiers {
     /// Finds the sequence number of the Source Connection ID having the
     /// provided value and the identifier of the path using it, if any.
     #[inline]
-    pub fn find_scid_seq(
-        &self, scid: &ConnectionId,
-    ) -> Option<(u64, Option<usize>)> {
+    pub fn find_scid_seq(&self, scid: &ConnectionId) -> Option<(u64, Option<usize>)> {
         self.scids.iter().find_map(|e| {
             if e.cid == *scid {
                 Some((e.seq, e.path_id))
@@ -716,15 +711,10 @@ impl ConnectionIdentifiers {
     /// source Connection ID set that need to be advertised to the peer through
     /// NEW_CONNECTION_ID frames.
     #[inline]
-    pub fn mark_advertise_new_scid_seq(
-        &mut self, scid_seq: u64, advertise: bool,
-    ) {
+    pub fn mark_advertise_new_scid_seq(&mut self, scid_seq: u64, advertise: bool) {
         if advertise {
             self.advertise_new_scid_seqs.push_back(scid_seq);
-        } else if let Some(index) = self
-            .advertise_new_scid_seqs
-            .iter()
-            .position(|s| *s == scid_seq)
+        } else if let Some(index) = self.advertise_new_scid_seqs.iter().position(|s| *s == scid_seq)
         {
             self.advertise_new_scid_seqs.remove(index);
         }
@@ -734,9 +724,7 @@ impl ConnectionIdentifiers {
     /// retired destination Connection ID set that need to be advertised to the
     /// peer through RETIRE_CONNECTION_ID frames.
     #[inline]
-    pub fn mark_retire_dcid_seq(
-        &mut self, dcid_seq: u64, retire: bool,
-    ) -> Result<()> {
+    pub fn mark_retire_dcid_seq(&mut self, dcid_seq: u64, retire: bool) -> Result<()> {
         if retire {
             self.retire_dcid_seqs.insert(dcid_seq)?;
         } else {
@@ -794,9 +782,7 @@ impl ConnectionIdentifiers {
 
     /// Gets the NEW_CONNECTION_ID frame related to the source connection ID
     /// with sequence `seq_num`.
-    pub fn get_new_connection_id_frame_for(
-        &self, seq_num: u64,
-    ) -> Result<frame::Frame> {
+    pub fn get_new_connection_id_frame_for(&self, seq_num: u64) -> Result<frame::Frame> {
         let e = self.scids.get(seq_num).ok_or(Error::InvalidState)?;
         Ok(frame::Frame::NewConnectionId {
             seq_num,

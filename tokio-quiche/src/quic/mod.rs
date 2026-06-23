@@ -89,18 +89,18 @@ use foundations::telemetry::log;
 use qlog::writer::make_qlog_writer_from_path;
 use qlog::writer::qlog_file_name;
 
-use crate::http3::settings::Http3Settings;
-use crate::metrics::DefaultMetrics;
-use crate::metrics::Metrics;
-use crate::settings::Config;
-use crate::socket::QuicListener;
-use crate::socket::Socket;
 use crate::ClientH3Controller;
 use crate::ClientH3Driver;
 use crate::ConnectionParams;
 use crate::QuicConnectionStream;
 use crate::QuicResult;
 use crate::QuicResultExt;
+use crate::http3::settings::Http3Settings;
+use crate::metrics::DefaultMetrics;
+use crate::metrics::Metrics;
+use crate::settings::Config;
+use crate::socket::QuicListener;
+use crate::socket::Socket;
 
 mod addr_validation_token;
 pub(crate) mod connection;
@@ -111,20 +111,19 @@ mod router;
 
 use self::connection::ApplicationOverQuic;
 use self::connection::ConnectionIdGenerator as _;
-use self::connection::QuicConnection;
-use self::router::acceptor::ConnectionAcceptor;
-use self::router::acceptor::ConnectionAcceptorConfig;
-use self::router::connector::ClientConnector;
-use self::router::InboundPacketRouter;
-
 pub use self::connection::ConnectionShutdownBehaviour;
 pub use self::connection::HandshakeError;
 pub use self::connection::HandshakeInfo;
 pub use self::connection::Incoming;
 pub use self::connection::QuicCommand;
+use self::connection::QuicConnection;
 pub use self::connection::QuicConnectionStats;
 pub use self::connection::SimpleConnectionIdGenerator;
 pub use self::hooks::ConnectionHook;
+use self::router::InboundPacketRouter;
+use self::router::acceptor::ConnectionAcceptor;
+use self::router::acceptor::ConnectionAcceptorConfig;
+use self::router::connector::ClientConnector;
 
 /// Alias of [quiche::Connection] used internally by the crate.
 pub type QuicheConnection = quiche::Connection<crate::buf_factory::BufFactory>;
@@ -142,7 +141,8 @@ pub type QuicheConnection = quiche::Connection<crate::buf_factory::BufFactory>;
 /// Sharing a socket among multiple connections will lead to lost packets as
 /// both connections try to read from the shared socket.
 pub async fn connect<Tx, Rx, S>(
-    socket: S, host: Option<&str>,
+    socket: S,
+    host: Option<&str>,
 ) -> QuicResult<(QuicConnection, ClientH3Controller)>
 where
     Tx: DatagramSocketSend + Send + 'static,
@@ -153,8 +153,7 @@ where
     // Don't apply_max_capabilities(): some NICs don't support GSO
     let socket: Socket<Tx, Rx> = socket.try_into()?;
 
-    let (h3_driver, h3_controller) =
-        ClientH3Driver::new(Http3Settings::default());
+    let (h3_driver, h3_controller) = ClientH3Driver::new(Http3Settings::default());
     let mut params = ConnectionParams::default();
     params.settings.max_idle_timeout = Some(Duration::from_secs(30));
 
@@ -176,7 +175,9 @@ where
 /// Sharing a socket among multiple connections will lead to lost packets as
 /// both connections try to read from the shared socket.
 pub async fn connect_with_config<Tx, Rx, App>(
-    socket: Socket<Tx, Rx>, host: Option<&str>, params: &ConnectionParams<'_>,
+    socket: Socket<Tx, Rx>,
+    host: Option<&str>,
+    params: &ConnectionParams<'_>,
     app: App,
 ) -> QuicResult<QuicConnection>
 where
@@ -235,9 +236,7 @@ where
         let id = format!("{:?}", scid);
         let path = std::path::Path::new(qlog_dir)
             .join(qlog_file_name(&id, client_config.qlog_compression));
-        if let Ok(writer) =
-            make_qlog_writer_from_path(&path, client_config.qlog_compression)
-        {
+        if let Ok(writer) = make_qlog_writer_from_path(&path, client_config.qlog_compression) {
             quiche_conn.set_qlog(
                 writer,
                 "tokio-quiche qlog".to_string(),
@@ -272,7 +271,7 @@ where
             Ok(()) => log::debug!("incoming packet router finished"),
             Err(error) => {
                 log::error!("incoming packet router failed"; "error"=>error)
-            },
+            }
         }
     });
 
@@ -284,7 +283,9 @@ where
 }
 
 pub(crate) fn start_listener<M>(
-    socket: QuicListener, params: &ConnectionParams, metrics: M,
+    socket: QuicListener,
+    params: &ConnectionParams,
+    metrics: M,
 ) -> std::io::Result<QuicConnectionStream<M>>
 where
     M: Metrics,
@@ -306,10 +307,7 @@ where
             disable_client_ip_validation: config.disable_client_ip_validation,
             qlog_dir: config.qlog_dir.clone(),
             qlog_compression: config.qlog_compression,
-            keylog_file: config
-                .keylog_file
-                .as_ref()
-                .and_then(|f| f.try_clone().ok()),
+            keylog_file: config.keylog_file.as_ref().and_then(|f| f.try_clone().ok()),
             #[cfg(target_os = "linux")]
             with_pktinfo: if local_addr.is_ipv4() {
                 config.has_ippktinfo
@@ -337,7 +335,7 @@ where
             Ok(()) => log::trace!("incoming packet router finished"),
             Err(error) => {
                 log::error!("incoming packet router failed"; "error"=>error)
-            },
+            }
         }
     });
     Ok(QuicConnectionStream::new(accept_stream))

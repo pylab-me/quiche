@@ -81,9 +81,8 @@ impl From<octets::BufferTooShortError> for Error {
 
 #[cfg(test)]
 mod tests {
-    use crate::*;
-
     use super::*;
+    use crate::*;
 
     #[test]
     fn encode_decode() {

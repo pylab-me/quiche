@@ -24,31 +24,33 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use crate::integration_tests::h3i_fixtures;
-use crate::integration_tests::start_server_with_settings;
-use crate::integration_tests::Http3Settings;
-use crate::integration_tests::QuicSettings;
-use crate::integration_tests::TestConnectionHook;
+use std::future::Future;
+use std::sync::Arc;
+use std::sync::Mutex;
+
 use futures::SinkExt;
 use h3i;
-use h3i::actions::h3::send_headers_frame;
 use h3i::actions::h3::Action;
 use h3i::actions::h3::StreamEvent;
 use h3i::actions::h3::StreamEventType;
 use h3i::actions::h3::WaitType;
+use h3i::actions::h3::send_headers_frame;
 use h3i::client::connection_summary::ConnectionSummary;
-use quiche::h3::NameValue;
 use quiche::ConnectionError;
 use quiche::WireErrorCode;
-use std::future::Future;
-use std::sync::Arc;
-use std::sync::Mutex;
+use quiche::h3::NameValue;
+use tokio_quiche::ServerH3Connection;
 use tokio_quiche::http3::driver::H3Event;
 use tokio_quiche::http3::driver::IncomingH3Headers;
 use tokio_quiche::http3::driver::OutboundFrame;
 use tokio_quiche::http3::driver::ServerH3Event;
 use tokio_quiche::quiche::h3::Header;
-use tokio_quiche::ServerH3Connection;
+
+use crate::integration_tests::Http3Settings;
+use crate::integration_tests::QuicSettings;
+use crate::integration_tests::TestConnectionHook;
+use crate::integration_tests::h3i_fixtures;
+use crate::integration_tests::start_server_with_settings;
 
 #[derive(Debug, Default, Clone)]
 struct TestContext {
@@ -76,12 +78,7 @@ async fn handle_0_rtt_request() {
     let nst_data = {
         let summary = {
             let h3i_config = h3i_fixtures::h3i_config(&url);
-            helper_connect_with_early_data(
-                h3i_config,
-                None,
-                helper_frame_actions(stream_id),
-            )
-            .await
+            helper_connect_with_early_data(h3i_config, None, helper_frame_actions(stream_id)).await
         };
 
         {
@@ -130,17 +127,13 @@ async fn handle_0_rtt_request() {
 }
 
 pub async fn helper_connect_with_early_data(
-    h3i_config: h3i::config::Config, early_actions: Option<Vec<Action>>,
+    h3i_config: h3i::config::Config,
+    early_actions: Option<Vec<Action>>,
     actions: Vec<Action>,
 ) -> ConnectionSummary {
     tokio::task::spawn_blocking(move || {
-        h3i::client::sync_client::connect_with_early_data(
-            h3i_config,
-            early_actions,
-            actions,
-            None,
-        )
-        .unwrap()
+        h3i::client::sync_client::connect_with_early_data(h3i_config, early_actions, actions, None)
+            .unwrap()
     })
     .await
     .unwrap()
@@ -172,7 +165,8 @@ fn helper_frame_actions(stream_id: u64) -> Vec<Action> {
 }
 
 fn helper_server_handler(
-    mut h3_conn: ServerH3Connection, context: &Arc<Mutex<TestContext>>,
+    mut h3_conn: ServerH3Connection,
+    context: &Arc<Mutex<TestContext>>,
 ) -> impl Future<Output = ()> {
     let context = context.clone();
 
@@ -185,7 +179,7 @@ fn helper_server_handler(
                     if let H3Event::ConnectionShutdown(_) = event {
                         break;
                     }
-                },
+                }
 
                 ServerH3Event::Headers {
                     incoming_headers,
@@ -196,18 +190,14 @@ fn helper_server_handler(
                         mut send, headers, ..
                     } = incoming_headers;
 
-                    let authority = headers
-                        .iter()
-                        .find(|v| v.name().eq(":authority".as_bytes()))
-                        .unwrap();
+                    let authority =
+                        headers.iter().find(|v| v.name().eq(":authority".as_bytes())).unwrap();
 
                     {
                         let mut context = context.lock().unwrap();
                         context.requests_handled_count += 1;
                         context.did_recv_early_data_request |= *is_in_early_data;
-                        let host = std::str::from_utf8(authority.value())
-                            .unwrap()
-                            .to_string();
+                        let host = std::str::from_utf8(authority.value()).unwrap().to_string();
                         context.hosts_seen.push(host);
                     }
 
@@ -219,10 +209,8 @@ fn helper_server_handler(
                     .await
                     .unwrap();
 
-                    send.send(OutboundFrame::Body(Default::default(), true))
-                        .await
-                        .unwrap();
-                },
+                    send.send(OutboundFrame::Body(Default::default(), true)).await.unwrap();
+                }
             }
         }
     }

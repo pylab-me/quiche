@@ -24,12 +24,12 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use foundations::settings::settings;
-use serde_with::serde_as;
-use serde_with::DurationMilliSeconds;
 use std::time::Duration;
 
+use foundations::settings::settings;
 pub use qlog::writer::QlogCompression;
+use serde_with::DurationMilliSeconds;
+use serde_with::serde_as;
 
 /// QUIC configuration parameters.
 #[serde_as]
@@ -357,10 +357,7 @@ pub struct QuicSettings {
 impl QuicSettings {
     #[inline]
     fn default_alpn() -> Vec<Vec<u8>> {
-        quiche::h3::APPLICATION_PROTOCOL
-            .iter()
-            .map(|v| v.to_vec())
-            .collect()
+        quiche::h3::APPLICATION_PROTOCOL.iter().map(|v| v.to_vec()).collect()
     }
 
     #[inline]
@@ -485,8 +482,9 @@ impl QuicSettings {
 
 #[cfg(test)]
 mod test {
-    use super::QuicSettings;
     use std::time::Duration;
+
+    use super::QuicSettings;
 
     #[test]
     fn timeouts_parse_as_milliseconds() {

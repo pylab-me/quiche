@@ -73,7 +73,10 @@ impl RttStats {
     }
 
     pub(crate) fn update_rtt(
-        &mut self, latest_rtt: Duration, mut ack_delay: Duration, now: Instant,
+        &mut self,
+        latest_rtt: Duration,
+        mut ack_delay: Duration,
+        now: Instant,
         handshake_confirmed: bool,
     ) {
         self.latest_rtt = latest_rtt;
@@ -103,12 +106,9 @@ impl RttStats {
             adjusted_rtt = latest_rtt - ack_delay;
         }
 
-        self.rttvar = self.rttvar * 3 / 4 +
-            Duration::from_nanos(
-                self.smoothed_rtt
-                    .as_nanos()
-                    .abs_diff(adjusted_rtt.as_nanos()) as u64 /
-                    4,
+        self.rttvar = self.rttvar * 3 / 4
+            + Duration::from_nanos(
+                self.smoothed_rtt.as_nanos().abs_diff(adjusted_rtt.as_nanos()) as u64 / 4,
             );
 
         self.smoothed_rtt = self.smoothed_rtt * 7 / 8 + adjusted_rtt / 8;
@@ -144,9 +144,6 @@ impl RttStats {
     }
 
     pub(crate) fn loss_delay(&self, time_thresh: f64) -> Duration {
-        self.latest_rtt
-            .max(self.smoothed_rtt)
-            .mul_f64(time_thresh)
-            .max(GRANULARITY)
+        self.latest_rtt.max(self.smoothed_rtt).mul_f64(time_thresh).max(GRANULARITY)
     }
 }

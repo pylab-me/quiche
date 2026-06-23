@@ -29,8 +29,8 @@
 use serde::Serialize;
 use serde::Serializer;
 
-use crate::quic;
 use crate::BoxError;
+use crate::quic;
 
 /// Type of handshake latency that was measured by a metric.
 #[derive(Clone, Eq, Hash, PartialEq, Serialize)]

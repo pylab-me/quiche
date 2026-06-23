@@ -24,20 +24,21 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use crate::fixtures::*;
-use h3i_fixtures::received_status_code_on_stream;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 
 use boring::ssl::BoxSelectCertFinish;
 use boring::ssl::ClientHello;
 use boring::ssl::SslContextBuilder;
 use boring::ssl::SslFiletype;
 use boring::ssl::SslMethod;
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
+use h3i_fixtures::received_status_code_on_stream;
 use tokio::task::yield_now;
 use tokio_quiche::quic::ConnectionHook;
 use tokio_quiche::settings::TlsCertificatePaths;
+
+use crate::fixtures::*;
 
 #[tokio::test]
 async fn test_hello_world_async_callbacks() {
@@ -50,25 +51,20 @@ async fn test_hello_world_async_callbacks() {
 
     impl ConnectionHook for TestAsyncCallbackConnectionHook {
         fn create_custom_ssl_context_builder(
-            &self, _settings: TlsCertificatePaths<'_>,
+            &self,
+            _settings: TlsCertificatePaths<'_>,
         ) -> Option<SslContextBuilder> {
-            let mut ssl_ctx_builder =
-                SslContextBuilder::new(SslMethod::tls()).ok()?;
+            let mut ssl_ctx_builder = SslContextBuilder::new(SslMethod::tls()).ok()?;
             ssl_ctx_builder.set_async_select_certificate_callback(|_| {
                 Ok(Box::pin(async {
                     yield_now().await;
-                    Ok(Box::new(|_: ClientHello<'_>| Ok(()))
-                        as BoxSelectCertFinish)
+                    Ok(Box::new(|_: ClientHello<'_>| Ok(())) as BoxSelectCertFinish)
                 }))
             });
 
-            ssl_ctx_builder
-                .set_private_key_file(TEST_KEY_FILE, SslFiletype::PEM)
-                .unwrap();
+            ssl_ctx_builder.set_private_key_file(TEST_KEY_FILE, SslFiletype::PEM).unwrap();
 
-            ssl_ctx_builder
-                .set_certificate_chain_file(TEST_CERT_FILE)
-                .unwrap();
+            ssl_ctx_builder.set_certificate_chain_file(TEST_CERT_FILE).unwrap();
 
             self.was_called.store(true, Ordering::SeqCst);
 
@@ -87,9 +83,7 @@ async fn test_hello_world_async_callbacks() {
     );
 
     let url = format!("{url}/1");
-    let summary = h3i_fixtures::request(&url, 1)
-        .await
-        .expect("request failed");
+    let summary = h3i_fixtures::request(&url, 1).await.expect("request failed");
 
     assert!(received_status_code_on_stream(&summary, 0, 200));
     assert!(hook.was_called.load(Ordering::SeqCst));
@@ -105,10 +99,10 @@ async fn test_async_callbacks_fail_after_initial_send() {
 
     impl ConnectionHook for TestAsyncCallbackConnectionHook {
         fn create_custom_ssl_context_builder(
-            &self, _settings: TlsCertificatePaths<'_>,
+            &self,
+            _settings: TlsCertificatePaths<'_>,
         ) -> Option<SslContextBuilder> {
-            let mut ssl_ctx_builder =
-                SslContextBuilder::new(SslMethod::tls()).ok()?;
+            let mut ssl_ctx_builder = SslContextBuilder::new(SslMethod::tls()).ok()?;
             ssl_ctx_builder.set_async_select_certificate_callback(|_| {
                 Ok(Box::pin(async {
                     // Async callbacks in tokio quiche are driven by calls to
@@ -126,13 +120,9 @@ async fn test_async_callbacks_fail_after_initial_send() {
                 }))
             });
 
-            ssl_ctx_builder
-                .set_private_key_file(TEST_KEY_FILE, SslFiletype::PEM)
-                .unwrap();
+            ssl_ctx_builder.set_private_key_file(TEST_KEY_FILE, SslFiletype::PEM).unwrap();
 
-            ssl_ctx_builder
-                .set_certificate_chain_file(TEST_CERT_FILE)
-                .unwrap();
+            ssl_ctx_builder.set_certificate_chain_file(TEST_CERT_FILE).unwrap();
 
             Some(ssl_ctx_builder)
         }

@@ -32,18 +32,17 @@ use std::fmt::Debug;
 use std::time::Duration;
 use std::time::Instant;
 
-use crate::recovery::gcongestion::bbr2::Params;
-use crate::recovery::gcongestion::Lost;
-use crate::recovery::RecoveryStats;
-
+use super::Acked;
+use super::BBRv2CongestionEvent;
+use super::Limits;
 use super::drain::Drain;
 use super::network_model::BBRv2NetworkModel;
 use super::probe_bw::ProbeBW;
 use super::probe_rtt::ProbeRTT;
 use super::startup::Startup;
-use super::Acked;
-use super::BBRv2CongestionEvent;
-use super::Limits;
+use crate::recovery::RecoveryStats;
+use crate::recovery::gcongestion::Lost;
+use crate::recovery::gcongestion::bbr2::Params;
 
 #[derive(Debug, Default, PartialEq)]
 pub(super) enum CyclePhase {
@@ -123,29 +122,37 @@ pub(super) trait ModeImpl: Debug {
     fn state_str(&self) -> &'static str;
 
     fn enter(
-        &mut self, now: Instant, congestion_event: Option<&BBRv2CongestionEvent>,
+        &mut self,
+        now: Instant,
+        congestion_event: Option<&BBRv2CongestionEvent>,
         params: &Params,
     );
 
-    fn leave(
-        &mut self, now: Instant, congestion_event: Option<&BBRv2CongestionEvent>,
-    );
+    fn leave(&mut self, now: Instant, congestion_event: Option<&BBRv2CongestionEvent>);
 
     fn is_probing_for_bandwidth(&self) -> bool;
 
     #[allow(clippy::too_many_arguments)]
     fn on_congestion_event(
-        self, prior_in_flight: usize, event_time: Instant,
-        acked_packets: &[Acked], lost_packets: &[Lost],
+        self,
+        prior_in_flight: usize,
+        event_time: Instant,
+        acked_packets: &[Acked],
+        lost_packets: &[Lost],
         congestion_event: &mut BBRv2CongestionEvent,
-        target_bytes_inflight: usize, params: &Params,
-        recovery_stats: &mut RecoveryStats, cwnd: usize,
+        target_bytes_inflight: usize,
+        params: &Params,
+        recovery_stats: &mut RecoveryStats,
+        cwnd: usize,
     ) -> Mode;
 
     fn get_cwnd_limits(&self, params: &Params) -> Limits<usize>;
 
     fn on_exit_quiescence(
-        self, now: Instant, quiescence_start_time: Instant, params: &Params,
+        self,
+        now: Instant,
+        quiescence_start_time: Instant,
+        params: &Params,
     ) -> Mode;
 }
 
@@ -187,11 +194,16 @@ impl Mode {
 
     #[allow(clippy::too_many_arguments)]
     pub(super) fn do_on_congestion_event(
-        &mut self, prior_in_flight: usize, event_time: Instant,
-        acked_packets: &[Acked], lost_packets: &[Lost],
+        &mut self,
+        prior_in_flight: usize,
+        event_time: Instant,
+        acked_packets: &[Acked],
+        lost_packets: &[Lost],
         congestion_event: &mut BBRv2CongestionEvent,
-        target_bytes_inflight: usize, params: &Params,
-        recovery_stats: &mut RecoveryStats, cwnd: usize,
+        target_bytes_inflight: usize,
+        params: &Params,
+        recovery_stats: &mut RecoveryStats,
+        cwnd: usize,
     ) -> bool {
         let mode_before = std::mem::discriminant(self);
 
@@ -213,13 +225,12 @@ impl Mode {
     }
 
     pub(super) fn do_on_exit_quiescence(
-        &mut self, now: Instant, quiescence_start_time: Instant, params: &Params,
+        &mut self,
+        now: Instant,
+        quiescence_start_time: Instant,
+        params: &Params,
     ) {
-        *self = std::mem::take(self).on_exit_quiescence(
-            now,
-            quiescence_start_time,
-            params,
-        )
+        *self = std::mem::take(self).on_exit_quiescence(now, quiescence_start_time, params)
     }
 
     pub fn network_model(&self) -> &BBRv2NetworkModel {
@@ -252,9 +263,7 @@ impl ModeImpl for Placeholder {
         unreachable!()
     }
 
-    fn enter(
-        &mut self, _: Instant, _: Option<&BBRv2CongestionEvent>, _params: &Params,
-    ) {
+    fn enter(&mut self, _: Instant, _: Option<&BBRv2CongestionEvent>, _params: &Params) {
         unreachable!()
     }
 
@@ -267,9 +276,16 @@ impl ModeImpl for Placeholder {
     }
 
     fn on_congestion_event(
-        self, _: usize, _: Instant, _: &[Acked], _: &[Lost],
-        _: &mut BBRv2CongestionEvent, _: usize, _params: &Params,
-        _recovery_stats: &mut RecoveryStats, _cwnd: usize,
+        self,
+        _: usize,
+        _: Instant,
+        _: &[Acked],
+        _: &[Lost],
+        _: &mut BBRv2CongestionEvent,
+        _: usize,
+        _params: &Params,
+        _recovery_stats: &mut RecoveryStats,
+        _cwnd: usize,
     ) -> Mode {
         unreachable!()
     }
@@ -278,9 +294,7 @@ impl ModeImpl for Placeholder {
         unreachable!()
     }
 
-    fn on_exit_quiescence(
-        self, _: Instant, _: Instant, _params: &Params,
-    ) -> Mode {
+    fn on_exit_quiescence(self, _: Instant, _: Instant, _params: &Params) -> Mode {
         unreachable!()
     }
 }
@@ -288,8 +302,8 @@ impl ModeImpl for Placeholder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::recovery::gcongestion::bbr2::DEFAULT_PARAMS;
     use crate::BbrParams;
+    use crate::recovery::gcongestion::bbr2::DEFAULT_PARAMS;
 
     #[test]
     fn cycle_params() {

@@ -30,17 +30,16 @@
 
 use std::time::Instant;
 
-use crate::recovery::gcongestion::bbr2::Params;
-use crate::recovery::gcongestion::Acked;
-use crate::recovery::gcongestion::Lost;
-use crate::recovery::RecoveryStats;
-
+use super::BBRv2CongestionEvent;
+use super::Limits;
 use super::mode::Cycle;
 use super::mode::Mode;
 use super::mode::ModeImpl;
 use super::network_model::BBRv2NetworkModel;
-use super::BBRv2CongestionEvent;
-use super::Limits;
+use crate::recovery::RecoveryStats;
+use crate::recovery::gcongestion::Acked;
+use crate::recovery::gcongestion::Lost;
+use crate::recovery::gcongestion::bbr2::Params;
 
 #[derive(Debug)]
 pub(super) struct ProbeRTT {
@@ -59,7 +58,9 @@ impl ProbeRTT {
     }
 
     fn into_probe_bw(
-        mut self, now: Instant, congestion_event: Option<&BBRv2CongestionEvent>,
+        mut self,
+        now: Instant,
+        congestion_event: Option<&BBRv2CongestionEvent>,
         params: &Params,
     ) -> Mode {
         self.leave(now, congestion_event);
@@ -87,75 +88,74 @@ impl ModeImpl for ProbeRTT {
     }
 
     fn on_congestion_event(
-        mut self, _prior_in_flight: usize, event_time: Instant,
-        _acked_packets: &[Acked], _lost_packets: &[Lost],
+        mut self,
+        _prior_in_flight: usize,
+        event_time: Instant,
+        _acked_packets: &[Acked],
+        _lost_packets: &[Lost],
         congestion_event: &mut BBRv2CongestionEvent,
-        _target_bytes_inflight: usize, params: &Params,
-        _recovery_stats: &mut RecoveryStats, _cwnd: usize,
+        _target_bytes_inflight: usize,
+        params: &Params,
+        _recovery_stats: &mut RecoveryStats,
+        _cwnd: usize,
     ) -> Mode {
         match self.exit_time {
             None => {
-                if congestion_event.bytes_in_flight <=
-                    self.inflight_target(params)
-                {
-                    self.exit_time = Some(
-                        congestion_event.event_time + params.probe_rtt_duration,
-                    )
+                if congestion_event.bytes_in_flight <= self.inflight_target(params) {
+                    self.exit_time = Some(congestion_event.event_time + params.probe_rtt_duration)
                 }
                 Mode::ProbeRTT(self)
-            },
-            Some(exit_time) =>
+            }
+            Some(exit_time) => {
                 if congestion_event.event_time > exit_time {
                     self.into_probe_bw(event_time, Some(congestion_event), params)
                 } else {
                     Mode::ProbeRTT(self)
-                },
+                }
+            }
         }
     }
 
     fn get_cwnd_limits(&self, params: &Params) -> Limits<usize> {
-        let inflight_upper_bound = self
-            .model
-            .inflight_lo()
-            .min(self.model.inflight_hi_with_headroom(params));
-        Limits::no_greater_than(
-            inflight_upper_bound.min(self.inflight_target(params)),
-        )
+        let inflight_upper_bound =
+            self.model.inflight_lo().min(self.model.inflight_hi_with_headroom(params));
+        Limits::no_greater_than(inflight_upper_bound.min(self.inflight_target(params)))
     }
 
     fn on_exit_quiescence(
-        self, now: Instant, _quiescence_start_time: Instant, params: &Params,
+        self,
+        now: Instant,
+        _quiescence_start_time: Instant,
+        params: &Params,
     ) -> Mode {
         match self.exit_time {
             None => self.into_probe_bw(now, None, params),
-            Some(exit_time) if now > exit_time =>
-                self.into_probe_bw(now, None, params),
+            Some(exit_time) if now > exit_time => self.into_probe_bw(now, None, params),
             Some(_) => Mode::ProbeRTT(self),
         }
     }
 
     fn enter(
-        &mut self, _now: Instant,
-        _congestion_event: Option<&BBRv2CongestionEvent>, params: &Params,
+        &mut self,
+        _now: Instant,
+        _congestion_event: Option<&BBRv2CongestionEvent>,
+        params: &Params,
     ) {
         self.model.set_pacing_gain(params.probe_rtt_pacing_gain);
         self.model.set_cwnd_gain(params.probe_rtt_cwnd_gain);
         self.exit_time = None;
     }
 
-    fn leave(
-        &mut self, _now: Instant,
-        _congestion_event: Option<&BBRv2CongestionEvent>,
-    ) {
-    }
+    fn leave(&mut self, _now: Instant, _congestion_event: Option<&BBRv2CongestionEvent>) {}
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::recovery::gcongestion::bbr2::DEFAULT_PARAMS;
-    use crate::BbrParams;
     use std::time::Duration;
+
+    use super::*;
+    use crate::BbrParams;
+    use crate::recovery::gcongestion::bbr2::DEFAULT_PARAMS;
 
     #[test]
     fn probe_rtt_params() {

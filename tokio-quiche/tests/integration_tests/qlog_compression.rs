@@ -36,15 +36,15 @@
 //! selection all the way to the emitted file on disk.
 
 #[cfg(all(feature = "qlog-gzip", feature = "qlog-zstd"))]
-use crate::fixtures::*;
-
-#[cfg(all(feature = "qlog-gzip", feature = "qlog-zstd"))]
 use std::time::Duration;
 
 #[cfg(all(feature = "qlog-gzip", feature = "qlog-zstd"))]
 use tokio::time::sleep;
 #[cfg(all(feature = "qlog-gzip", feature = "qlog-zstd"))]
 use tokio_quiche::settings::QlogCompression;
+
+#[cfg(all(feature = "qlog-gzip", feature = "qlog-zstd"))]
+use crate::fixtures::*;
 
 /// Short sleep used after the request completes but before we read
 /// the qlog file, so the server-side connection's drop path runs
@@ -59,9 +59,7 @@ const DRAIN_DELAY: Duration = Duration::from_millis(200);
 /// assert the server produced a file whose name ends with
 /// `expected_suffix`.
 #[cfg(all(feature = "qlog-gzip", feature = "qlog-zstd"))]
-async fn assert_server_emits_suffix(
-    compression: QlogCompression, expected_suffix: &str,
-) {
+async fn assert_server_emits_suffix(compression: QlogCompression, expected_suffix: &str) {
     let dir = tempfile::tempdir().expect("tempdir");
 
     let mut quic_settings = QuicSettings::default();
@@ -92,10 +90,7 @@ async fn assert_server_emits_suffix(
         "expected 1 qlog file under {:?}, got {entries:?}",
         dir.path()
     );
-    let name = entries[0]
-        .file_name()
-        .and_then(|s| s.to_str())
-        .expect("file name");
+    let name = entries[0].file_name().and_then(|s| s.to_str()).expect("file name");
     assert!(
         name.ends_with(expected_suffix),
         "expected name ending in {expected_suffix}, got {name}"

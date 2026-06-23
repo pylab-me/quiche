@@ -24,8 +24,9 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use crate::quic::ConnectionHook;
 use std::sync::Arc;
+
+use crate::quic::ConnectionHook;
 
 /// Hook configuration for use in the QUIC connection lifecycle.
 ///

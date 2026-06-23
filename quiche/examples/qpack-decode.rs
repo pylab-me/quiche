@@ -28,11 +28,9 @@
 extern crate log;
 
 use std::fs::File;
-
 use std::io::prelude::*;
 
 use quiche::h3::NameValue;
-
 use quiche::h3::qpack;
 
 fn main() {

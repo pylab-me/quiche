@@ -28,9 +28,8 @@
 extern crate log;
 
 use std::fs::File;
-
-use std::io::prelude::*;
 use std::io::BufReader;
+use std::io::prelude::*;
 
 use quiche::h3;
 
@@ -65,12 +64,8 @@ fn main() {
 
             debug!("Writing header block stream={stream_id} len={len}");
 
-            std::io::stdout()
-                .write_all(&stream_id.to_be_bytes())
-                .unwrap();
-            std::io::stdout()
-                .write_all(&(len as u32).to_be_bytes())
-                .unwrap();
+            std::io::stdout().write_all(&stream_id.to_be_bytes()).unwrap();
+            std::io::stdout().write_all(&(len as u32).to_be_bytes()).unwrap();
             std::io::stdout().write_all(&out[..len]).unwrap();
 
             stream_id += 1;

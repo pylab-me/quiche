@@ -35,12 +35,12 @@ use datagram_socket::ShutdownConnection;
 use datagram_socket::SocketStats;
 use quiche::ConnectionId;
 
-use super::client;
-use super::server;
 use super::DriverHooks;
 use super::H3Controller;
-use crate::quic::QuicConnectionStats;
+use super::client;
+use super::server;
 use crate::QuicConnection;
+use crate::quic::QuicConnectionStats;
 
 pub type ClientH3Connection = H3Connection<client::ClientHooks>;
 pub type ServerH3Connection = H3Connection<server::ServerHooks>;
@@ -54,9 +54,7 @@ pub struct H3Connection<H: DriverHooks> {
 
 impl<H: DriverHooks> H3Connection<H> {
     /// Bundles `quic_connection` and `h3_controller` into a new [H3Connection].
-    pub fn new(
-        quic_connection: QuicConnection, h3_controller: H3Controller<H>,
-    ) -> Self {
+    pub fn new(quic_connection: QuicConnection, h3_controller: H3Controller<H>) -> Self {
         Self {
             quic_connection,
             h3_controller,
@@ -91,9 +89,7 @@ impl<H: DriverHooks> H3Connection<H> {
 
 impl<H: DriverHooks> ShutdownConnection for H3Connection<H> {
     #[inline]
-    fn poll_shutdown(
-        &mut self, _cx: &mut std::task::Context,
-    ) -> Poll<std::io::Result<()>> {
+    fn poll_shutdown(&mut self, _cx: &mut std::task::Context) -> Poll<std::io::Result<()>> {
         // TODO: does nothing at the moment
         Poll::Ready(Ok(()))
     }

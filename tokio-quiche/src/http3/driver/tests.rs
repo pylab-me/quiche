@@ -1,16 +1,15 @@
-use crate::http3::driver::client::ClientHooks;
-use crate::http3::driver::server::ServerHooks;
 use assert_matches::assert_matches;
 
 use super::test_utils::*;
 use super::*;
+use crate::http3::driver::client::ClientHooks;
+use crate::http3::driver::server::ServerHooks;
 
 /// Tests for connection close error metrics recorded by
 /// [`H3Driver::on_conn_close`].
 mod conn_close_metrics {
-    use crate::ApplicationOverQuic as _;
-
     use super::*;
+    use crate::ApplicationOverQuic as _;
 
     /// Peer sends a QUIC-level CONNECTION_CLOSE and the work loop
     /// completes with Ok. Verifies the peer QUIC error counter is
@@ -21,17 +20,11 @@ mod conn_close_metrics {
         helper.complete_handshake().unwrap();
 
         // Peer (client) closes with a QUIC-level error
-        helper
-            .pipe
-            .client
-            .close(false, 0x1, b"internal error")
-            .unwrap();
+        helper.pipe.client.close(false, 0x1, b"internal error").unwrap();
         helper.pipe.advance().unwrap();
 
         let metrics = TestMetrics::default();
-        helper
-            .driver
-            .on_conn_close(&mut helper.pipe.server, &metrics, &Ok(()));
+        helper.driver.on_conn_close(&mut helper.pipe.server, &metrics, &Ok(()));
 
         assert_eq!(metrics.peer_quic.get(), 1);
         assert_eq!(metrics.peer_h3.get(), 0);
@@ -52,9 +45,7 @@ mod conn_close_metrics {
         helper.pipe.advance().unwrap();
 
         let metrics = TestMetrics::default();
-        helper
-            .driver
-            .on_conn_close(&mut helper.pipe.server, &metrics, &Ok(()));
+        helper.driver.on_conn_close(&mut helper.pipe.server, &metrics, &Ok(()));
 
         assert_eq!(metrics.peer_h3.get(), 1);
         assert_eq!(metrics.peer_quic.get(), 0);
@@ -70,18 +61,11 @@ mod conn_close_metrics {
         helper.complete_handshake().unwrap();
 
         // Local side (server) closes with a QUIC-level error
-        helper
-            .pipe
-            .server
-            .close(false, 0x1, b"internal error")
-            .unwrap();
+        helper.pipe.server.close(false, 0x1, b"internal error").unwrap();
 
-        let err: crate::QuicResult<()> =
-            Err(H3ConnectionError::PostAcceptTimeout.into());
+        let err: crate::QuicResult<()> = Err(H3ConnectionError::PostAcceptTimeout.into());
         let metrics = TestMetrics::default();
-        helper
-            .driver
-            .on_conn_close(&mut helper.pipe.server, &metrics, &err);
+        helper.driver.on_conn_close(&mut helper.pipe.server, &metrics, &err);
 
         assert_eq!(metrics.local_quic.get(), 1);
         assert_eq!(metrics.local_h3.get(), 0);
@@ -104,9 +88,7 @@ mod client_side_driver {
         helper.advance_and_run_loop().unwrap();
 
         // client sends a request
-        let stream_id = helper
-            .driver_send_request(make_request_headers("GET"), false)
-            .unwrap();
+        let stream_id = helper.driver_send_request(make_request_headers("GET"), false).unwrap();
 
         // servers reads request and sends response headers
         helper.advance_and_run_loop().unwrap();
@@ -139,9 +121,7 @@ mod client_side_driver {
         assert_eq!(helper.peer_server_recv_body_vec(0, 1024), Ok(vec![1; 5]));
 
         // client sends fin, server sends body and fin
-        to_server
-            .try_send(OutboundFrame::Body(Default::default(), true))
-            .unwrap();
+        to_server.try_send(OutboundFrame::Body(Default::default(), true)).unwrap();
         helper.peer_server_send_body(0, &[2; 10], true).unwrap();
 
         // Server reads fin
@@ -194,9 +174,7 @@ mod client_side_driver {
         helper.advance_and_run_loop().unwrap();
 
         // client sends a request with fin
-        let stream_id = helper
-            .driver_send_request(make_request_headers("GET"), true)
-            .unwrap();
+        let stream_id = helper.driver_send_request(make_request_headers("GET"), true).unwrap();
 
         // servers reads request and sends response headers
         helper.advance_and_run_loop().unwrap();
@@ -248,16 +226,13 @@ mod client_side_driver {
     #[test]
     fn client_send_reset_stream_when_outbound_frame_channel_drops() {
         let mut helper = DriverTestHelper::<ClientHooks>::new().unwrap();
-        const REQUEST_CANCELED_ERR: u64 =
-            h3::WireErrorCode::RequestCancelled as u64;
+        const REQUEST_CANCELED_ERR: u64 = h3::WireErrorCode::RequestCancelled as u64;
         helper.complete_handshake().unwrap();
         helper.advance_and_run_loop().unwrap();
 
         // The client uses H3Driver
         // client sends a request
-        let stream_id = helper
-            .driver_send_request(make_request_headers("GET"), false)
-            .unwrap();
+        let stream_id = helper.driver_send_request(make_request_headers("GET"), false).unwrap();
 
         // servers reads request and sends response headers
         helper.advance_and_run_loop().unwrap();
@@ -323,16 +298,13 @@ mod client_side_driver {
     #[test]
     fn client_send_reset_stream_when_outbound_frame_channel_drops_2() {
         let mut helper = DriverTestHelper::<ClientHooks>::new().unwrap();
-        const REQUEST_CANCELED_ERR: u64 =
-            h3::WireErrorCode::RequestCancelled as u64;
+        const REQUEST_CANCELED_ERR: u64 = h3::WireErrorCode::RequestCancelled as u64;
         helper.complete_handshake().unwrap();
         helper.advance_and_run_loop().unwrap();
 
         // The client uses H3Driver
         // client sends a request
-        let stream_id = helper
-            .driver_send_request(make_request_headers("GET"), false)
-            .unwrap();
+        let stream_id = helper.driver_send_request(make_request_headers("GET"), false).unwrap();
 
         // servers reads request and sends response headers, body, and fin
         helper.advance_and_run_loop().unwrap();
@@ -399,16 +371,13 @@ mod client_side_driver {
             quiche::test_utils::Pipe::with_config_and_buf(&mut config).unwrap(),
         )
         .unwrap();
-        const REQUEST_CANCELED_ERR: u64 =
-            h3::WireErrorCode::RequestCancelled as u64;
+        const REQUEST_CANCELED_ERR: u64 = h3::WireErrorCode::RequestCancelled as u64;
         helper.complete_handshake().unwrap();
         helper.advance_and_run_loop().unwrap();
 
         // The client uses H3Driver
         // client sends a request
-        let stream_id = helper
-            .driver_send_request(make_request_headers("GET"), false)
-            .unwrap();
+        let stream_id = helper.driver_send_request(make_request_headers("GET"), false).unwrap();
 
         // servers reads request and sends response headers, and fin
         helper.advance_and_run_loop().unwrap();
@@ -455,13 +424,7 @@ mod client_side_driver {
         helper.pipe.advance().unwrap();
         assert_eq!(helper.driver.waiting_streams.len(), 0);
         assert!(helper.driver.stream_map.get(&0).unwrap().recv.is_some());
-        assert!(helper
-            .driver
-            .stream_map
-            .get(&0)
-            .unwrap()
-            .queued_frame
-            .is_some());
+        assert!(helper.driver.stream_map.get(&0).unwrap().queued_frame.is_some());
 
         // clsoe the channel.
         drop(resp.send);
@@ -504,9 +467,7 @@ mod client_side_driver {
 
         // The client uses H3Driver
         // client sends a request
-        let stream_id = helper
-            .driver_send_request(make_request_headers("GET"), false)
-            .unwrap();
+        let stream_id = helper.driver_send_request(make_request_headers("GET"), false).unwrap();
 
         // servers reads request and sends response headers, body, and fin
         helper.advance_and_run_loop().unwrap();
@@ -582,9 +543,7 @@ mod client_side_driver {
         helper.advance_and_run_loop().unwrap();
 
         // Client sends a request with fin (GET, no body).
-        let stream_id = helper
-            .driver_send_request(make_request_headers("GET"), true)
-            .unwrap();
+        let stream_id = helper.driver_send_request(make_request_headers("GET"), true).unwrap();
         assert_eq!(stream_id, 0);
 
         // Server sees the request and starts a streaming response.
@@ -611,10 +570,7 @@ mod client_side_driver {
 
         // Server sends GOAWAY with id = stream_id + 4 (our stream was
         // accepted, but no future streams will be).
-        helper
-            .peer
-            .send_goaway(&mut helper.pipe.server, stream_id + 4)
-            .unwrap();
+        helper.peer.send_goaway(&mut helper.pipe.server, stream_id + 4).unwrap();
         // Server continues sending body data on the existing stream.
         helper.peer_server_send_body(0, &[2; 10], false).unwrap();
 
@@ -634,7 +590,7 @@ mod client_side_driver {
                 H3Event::GoAway { id } => {
                     assert_eq!(id, stream_id + 4);
                     break;
-                },
+                }
                 H3Event::BodyBytesReceived { .. } => continue,
                 other => panic!("unexpected event: {other:?}"),
             }
@@ -665,9 +621,8 @@ mod server_side_driver {
         helper.advance_and_run_loop().unwrap();
 
         // client sends a request
-        let stream_id = helper
-            .peer_client_send_request(make_request_headers("GET"), false)
-            .unwrap();
+        let stream_id =
+            helper.peer_client_send_request(make_request_headers("GET"), false).unwrap();
 
         // servers reads request and sends response headers
         helper.advance_and_run_loop().unwrap();
@@ -722,9 +677,8 @@ mod server_side_driver {
         helper.advance_and_run_loop().unwrap();
 
         // client sends a request but NO FIN.
-        let stream_id = helper
-            .peer_client_send_request(make_request_headers("GET"), false)
-            .unwrap();
+        let stream_id =
+            helper.peer_client_send_request(make_request_headers("GET"), false).unwrap();
 
         // servers reads request and sends response headers
         helper.advance_and_run_loop().unwrap();
@@ -767,9 +721,8 @@ mod server_side_driver {
         helper.advance_and_run_loop().unwrap();
 
         // client sends a request
-        let stream_id = helper
-            .peer_client_send_request(make_request_headers("GET"), false)
-            .unwrap();
+        let stream_id =
+            helper.peer_client_send_request(make_request_headers("GET"), false).unwrap();
 
         // servers reads request and sends response headers
         helper.advance_and_run_loop().unwrap();
@@ -795,10 +748,7 @@ mod server_side_driver {
         );
         assert_eq!(helper.peer_client_poll(), Err(h3::Error::Done));
         assert_eq!(
-            helper
-                .pipe
-                .client
-                .stream_shutdown(0, quiche::Shutdown::Read, 4242),
+            helper.pipe.client.stream_shutdown(0, quiche::Shutdown::Read, 4242),
             Ok(())
         );
         helper.advance_and_run_loop().unwrap();
@@ -853,9 +803,8 @@ mod server_side_driver {
         helper.advance_and_run_loop().unwrap();
 
         // client (peer) sends a request
-        let stream_id = helper
-            .peer_client_send_request(make_request_headers("GET"), false)
-            .unwrap();
+        let stream_id =
+            helper.peer_client_send_request(make_request_headers("GET"), false).unwrap();
 
         // servers reads request and sends response headers
         helper.advance_and_run_loop().unwrap();
@@ -881,10 +830,7 @@ mod server_side_driver {
         );
         assert_eq!(helper.peer_client_poll(), Err(h3::Error::Done));
         assert_eq!(
-            helper
-                .pipe
-                .client
-                .stream_shutdown(0, quiche::Shutdown::Write, 4242),
+            helper.pipe.client.stream_shutdown(0, quiche::Shutdown::Write, 4242),
             Ok(())
         );
         helper.advance_and_run_loop().unwrap();
@@ -934,9 +880,8 @@ mod server_side_driver {
         helper.advance_and_run_loop().unwrap();
 
         // client (peer) sends a request
-        let stream_id = helper
-            .peer_client_send_request(make_request_headers("GET"), false)
-            .unwrap();
+        let stream_id =
+            helper.peer_client_send_request(make_request_headers("GET"), false).unwrap();
 
         // servers reads request and sends response headers
         helper.advance_and_run_loop().unwrap();
@@ -971,10 +916,7 @@ mod server_side_driver {
         assert_matches!(helper.peer_client_poll(), Ok((0, h3::Event::Data)));
         helper.peer_client_recv_body_vec(0, 1024).unwrap();
         assert_eq!(
-            helper
-                .pipe
-                .client
-                .stream_shutdown(0, quiche::Shutdown::Write, 4242),
+            helper.pipe.client.stream_shutdown(0, quiche::Shutdown::Write, 4242),
             Ok(())
         );
         helper.advance_and_run_loop().unwrap();
@@ -1014,9 +956,8 @@ mod server_side_driver {
         helper.advance_and_run_loop().unwrap();
 
         // client (peer) sends a request
-        let stream_id = helper
-            .peer_client_send_request(make_request_headers("GET"), false)
-            .unwrap();
+        let stream_id =
+            helper.peer_client_send_request(make_request_headers("GET"), false).unwrap();
 
         // servers reads request and sends response headers and some body bytes
         helper.advance_and_run_loop().unwrap();
@@ -1080,19 +1021,14 @@ mod server_side_driver {
         // first.
         helper.pipe.advance().unwrap();
         assert_eq!(
-            helper
-                .pipe
-                .client
-                .stream_shutdown(0, quiche::Shutdown::Write, 4242),
+            helper.pipe.client.stream_shutdown(0, quiche::Shutdown::Write, 4242),
             Ok(())
         );
         helper.pipe.advance().unwrap();
-        tokio::task::unconstrained(
-            helper.driver.wait_for_data(&mut helper.pipe.server),
-        )
-        .now_or_never()
-        .unwrap_or(Ok(()))
-        .unwrap();
+        tokio::task::unconstrained(helper.driver.wait_for_data(&mut helper.pipe.server))
+            .now_or_never()
+            .unwrap_or(Ok(()))
+            .unwrap();
 
         // The channel is closed because the peer send us the reset.
         assert!(from_client.is_closed());
@@ -1137,9 +1073,8 @@ mod server_side_driver {
         helper.advance_and_run_loop().unwrap();
 
         // client (peer) sends a request
-        let stream_id = helper
-            .peer_client_send_request(make_request_headers("GET"), false)
-            .unwrap();
+        let stream_id =
+            helper.peer_client_send_request(make_request_headers("GET"), false).unwrap();
 
         // servers reads request and sends response headers
         helper.advance_and_run_loop().unwrap();
@@ -1187,10 +1122,7 @@ mod server_side_driver {
 
         // client sends a reset.
         assert_eq!(
-            helper
-                .pipe
-                .client
-                .stream_shutdown(0, quiche::Shutdown::Write, 4242),
+            helper.pipe.client.stream_shutdown(0, quiche::Shutdown::Write, 4242),
             Ok(())
         );
         helper.advance_and_run_loop().unwrap();
@@ -1204,9 +1136,7 @@ mod server_side_driver {
         );
 
         // send fin to client
-        to_client
-            .try_send(OutboundFrame::Body(Default::default(), true))
-            .unwrap();
+        to_client.try_send(OutboundFrame::Body(Default::default(), true)).unwrap();
         helper.advance_and_run_loop().unwrap();
 
         assert_eq!(
@@ -1233,16 +1163,14 @@ mod server_side_driver {
 
     #[test]
     fn server_driver_send_stop_sending_after_channel_drop() {
-        const REQUEST_CANCELED_ERR: u64 =
-            h3::WireErrorCode::RequestCancelled as u64;
+        const REQUEST_CANCELED_ERR: u64 = h3::WireErrorCode::RequestCancelled as u64;
         let mut helper = DriverTestHelper::<ServerHooks>::new().unwrap();
         helper.complete_handshake().unwrap();
         helper.advance_and_run_loop().unwrap();
 
         // client sends a request
-        let stream_id = helper
-            .peer_client_send_request(make_request_headers("GET"), false)
-            .unwrap();
+        let stream_id =
+            helper.peer_client_send_request(make_request_headers("GET"), false).unwrap();
 
         // servers reads request and sends response headers
         helper.advance_and_run_loop().unwrap();
@@ -1341,9 +1269,8 @@ mod server_side_driver {
         helper.advance_and_run_loop().unwrap();
 
         // client sends a request
-        let stream_id = helper
-            .peer_client_send_request(make_request_headers("GET"), false)
-            .unwrap();
+        let stream_id =
+            helper.peer_client_send_request(make_request_headers("GET"), false).unwrap();
 
         // servers reads request and sends response headers
         helper.advance_and_run_loop().unwrap();
@@ -1409,16 +1336,14 @@ mod server_side_driver {
     // hasn't been able to deliver it before the channel is dropped.
     #[test]
     fn server_driver_drop_channel_after_fin_2() {
-        const REQUEST_CANCELED_ERR: u64 =
-            h3::WireErrorCode::RequestCancelled as u64;
+        const REQUEST_CANCELED_ERR: u64 = h3::WireErrorCode::RequestCancelled as u64;
         let mut helper = DriverTestHelper::<ServerHooks>::new().unwrap();
         helper.complete_handshake().unwrap();
         helper.advance_and_run_loop().unwrap();
 
         // client sends a request
-        let stream_id = helper
-            .peer_client_send_request(make_request_headers("GET"), false)
-            .unwrap();
+        let stream_id =
+            helper.peer_client_send_request(make_request_headers("GET"), false).unwrap();
 
         // servers reads request and sends response headers
         helper.advance_and_run_loop().unwrap();
@@ -1499,9 +1424,8 @@ mod server_side_driver {
         helper.advance_and_run_loop().unwrap();
 
         // client sends a request
-        let stream_id = helper
-            .peer_client_send_request(make_request_headers("GET"), false)
-            .unwrap();
+        let stream_id =
+            helper.peer_client_send_request(make_request_headers("GET"), false).unwrap();
 
         // servers reads request and sends response headers
         helper.advance_and_run_loop().unwrap();
@@ -1570,9 +1494,8 @@ mod server_side_driver {
         helper.advance_and_run_loop().unwrap();
 
         // client sends a request
-        let stream_id = helper
-            .peer_client_send_request(make_request_headers("GET"), false)
-            .unwrap();
+        let stream_id =
+            helper.peer_client_send_request(make_request_headers("GET"), false).unwrap();
 
         // server reads request
         helper.advance_and_run_loop().unwrap();
@@ -1584,11 +1507,12 @@ mod server_side_driver {
         let audit_stats = req.h3_audit_stats.clone();
 
         // Server calls shutdown_stream via the controller
-        helper
-            .controller
-            .shutdown_stream(stream_id, StreamShutdown::Write {
+        helper.controller.shutdown_stream(
+            stream_id,
+            StreamShutdown::Write {
                 error_code: CUSTOM_ERROR_CODE,
-            });
+            },
+        );
 
         helper.advance_and_run_loop().unwrap();
 
@@ -1620,9 +1544,8 @@ mod server_side_driver {
         helper.advance_and_run_loop().unwrap();
 
         // client sends a request without fin (expecting to send body)
-        let stream_id = helper
-            .peer_client_send_request(make_request_headers("POST"), false)
-            .unwrap();
+        let stream_id =
+            helper.peer_client_send_request(make_request_headers("POST"), false).unwrap();
 
         // server reads request
         helper.advance_and_run_loop().unwrap();
@@ -1634,11 +1557,12 @@ mod server_side_driver {
         let audit_stats = req.h3_audit_stats.clone();
 
         // Server calls shutdown_stream with Read direction (STOP_SENDING)
-        helper
-            .controller
-            .shutdown_stream(stream_id, StreamShutdown::Read {
+        helper.controller.shutdown_stream(
+            stream_id,
+            StreamShutdown::Read {
                 error_code: CUSTOM_ERROR_CODE,
-            });
+            },
+        );
 
         helper.advance_and_run_loop().unwrap();
 
@@ -1672,9 +1596,8 @@ mod server_side_driver {
         helper.advance_and_run_loop().unwrap();
 
         // client sends a request without fin
-        let stream_id = helper
-            .peer_client_send_request(make_request_headers("POST"), false)
-            .unwrap();
+        let stream_id =
+            helper.peer_client_send_request(make_request_headers("POST"), false).unwrap();
 
         // server reads request
         helper.advance_and_run_loop().unwrap();
@@ -1686,12 +1609,13 @@ mod server_side_driver {
         let audit_stats = req.h3_audit_stats.clone();
 
         // Server calls shutdown_stream with Both directions
-        helper
-            .controller
-            .shutdown_stream(stream_id, StreamShutdown::Both {
+        helper.controller.shutdown_stream(
+            stream_id,
+            StreamShutdown::Both {
                 read_error_code: READ_ERROR_CODE,
                 write_error_code: WRITE_ERROR_CODE,
-            });
+            },
+        );
 
         helper.advance_and_run_loop().unwrap();
 
@@ -1737,9 +1661,7 @@ mod server_side_driver {
         helper.advance_and_run_loop().unwrap();
 
         // Client sends a request.
-        let stream_id = helper
-            .peer_client_send_request(make_request_headers("GET"), true)
-            .unwrap();
+        let stream_id = helper.peer_client_send_request(make_request_headers("GET"), true).unwrap();
         assert_eq!(stream_id, 0);
 
         // Server receives the request and starts a streaming response.
@@ -1763,10 +1685,7 @@ mod server_side_driver {
 
         // Server sends first body chunk.
         to_client
-            .try_send(OutboundFrame::Body(
-                Bytes::copy_from_slice(&[1; 10]),
-                false,
-            ))
+            .try_send(OutboundFrame::Body(Bytes::copy_from_slice(&[1; 10]), false))
             .unwrap();
         helper.advance_and_run_loop().unwrap();
 
@@ -1784,7 +1703,7 @@ mod server_side_driver {
                 H3Event::GoAway { id } => {
                     assert_eq!(id, 0);
                     break;
-                },
+                }
                 H3Event::BodyBytesReceived { .. } => continue,
                 H3Event::StreamClosed { .. } => continue,
                 other => panic!("unexpected event: {other:?}"),
@@ -1794,10 +1713,7 @@ mod server_side_driver {
         // Server continues sending response body — the connection is
         // still alive.
         to_client
-            .try_send(OutboundFrame::Body(
-                Bytes::copy_from_slice(&[2; 10]),
-                false,
-            ))
+            .try_send(OutboundFrame::Body(Bytes::copy_from_slice(&[2; 10]), false))
             .unwrap();
         helper.advance_and_run_loop().unwrap();
 
@@ -1832,17 +1748,11 @@ mod server_side_driver {
         drop(helper.controller);
 
         // run wait_for_data to detect the receiver drop
-        tokio::task::unconstrained(
-            helper.driver.wait_for_data(&mut helper.pipe.server),
-        )
-        .now_or_never();
+        tokio::task::unconstrained(helper.driver.wait_for_data(&mut helper.pipe.server))
+            .now_or_never();
 
         // connection closed with H3 NoError
-        let local_error = helper
-            .pipe
-            .server
-            .local_error()
-            .expect("connection should be closing");
+        let local_error = helper.pipe.server.local_error().expect("connection should be closing");
         assert!(local_error.is_app, "should be application-level close");
         assert_eq!(
             local_error.error_code,
@@ -1855,18 +1765,14 @@ mod server_side_driver {
     // does NOT close the connection immediately (e.g. tunnel scenarios).
     #[test]
     fn h3_controller_drop_keeps_connection_alive_when_streams_exist() {
-        let mut helper =
-            DriverTestHelper::<ServerHooks>::with_pipe_and_http3_settings(
-                quiche::test_utils::Pipe::with_config_and_buf(
-                    &mut default_quiche_config(),
-                )
-                .unwrap(),
-                Http3Settings {
-                    enable_extended_connect: true,
-                    ..Default::default()
-                },
-            )
-            .unwrap();
+        let mut helper = DriverTestHelper::<ServerHooks>::with_pipe_and_http3_settings(
+            quiche::test_utils::Pipe::with_config_and_buf(&mut default_quiche_config()).unwrap(),
+            Http3Settings {
+                enable_extended_connect: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
         helper.complete_handshake().unwrap();
         helper.advance_and_run_loop().unwrap();
 
@@ -1878,9 +1784,7 @@ mod server_side_driver {
             h3::Header::new(b":path", b"/"),
             h3::Header::new(b"datagram-flow-id", b"0"),
         ];
-        helper
-            .peer_client_send_request(connect_headers, false)
-            .unwrap();
+        helper.peer_client_send_request(connect_headers, false).unwrap();
         helper.advance_and_run_loop().unwrap();
 
         // Consume events to keep channels alive
@@ -1897,10 +1801,8 @@ mod server_side_driver {
         assert_eq!(helper.driver.flow_map.len(), 1);
 
         drop(helper.controller);
-        tokio::task::unconstrained(
-            helper.driver.wait_for_data(&mut helper.pipe.server),
-        )
-        .now_or_never();
+        tokio::task::unconstrained(helper.driver.wait_for_data(&mut helper.pipe.server))
+            .now_or_never();
 
         // Connection stays open (stream and flow still active)
         assert!(helper.pipe.server.local_error().is_none());
@@ -1923,9 +1825,7 @@ mod server_side_driver {
             h3::Header::new(b":path", b"/"),
             h3::Header::new(b":protocol", b"webtransport"),
         ];
-        helper
-            .peer_client_send_request(connect_headers, true)
-            .unwrap();
+        helper.peer_client_send_request(connect_headers, true).unwrap();
         helper.advance_and_run_loop().unwrap();
 
         // No NewFlow event — flow was not created
@@ -1939,21 +1839,13 @@ mod server_side_driver {
 
         // Drop controller, then run wait_for_data
         drop(helper.controller);
-        tokio::task::unconstrained(
-            helper.driver.wait_for_data(&mut helper.pipe.server),
-        )
-        .now_or_never();
-        tokio::task::unconstrained(
-            helper.driver.wait_for_data(&mut helper.pipe.server),
-        )
-        .now_or_never();
+        tokio::task::unconstrained(helper.driver.wait_for_data(&mut helper.pipe.server))
+            .now_or_never();
+        tokio::task::unconstrained(helper.driver.wait_for_data(&mut helper.pipe.server))
+            .now_or_never();
 
         // Connection closes because stream_map and flow_map are empty
-        let local_error = helper
-            .pipe
-            .server
-            .local_error()
-            .expect("connection should be closing");
+        let local_error = helper.pipe.server.local_error().expect("connection should be closing");
         assert!(local_error.is_app, "should be application-level close");
         assert_eq!(
             local_error.error_code,
@@ -1971,9 +1863,8 @@ mod server_side_driver {
         helper.advance_and_run_loop().unwrap();
 
         // Client sends a request the stream stays open
-        let stream_id = helper
-            .peer_client_send_request(make_request_headers("GET"), false)
-            .unwrap();
+        let stream_id =
+            helper.peer_client_send_request(make_request_headers("GET"), false).unwrap();
 
         helper.advance_and_run_loop().unwrap();
         let req = assert_matches!(
@@ -2017,45 +1908,29 @@ mod server_side_driver {
 
         // Drop the controller
         drop(helper.controller);
-        tokio::task::unconstrained(
-            helper.driver.wait_for_data(&mut helper.pipe.server),
-        )
-        .now_or_never();
+        tokio::task::unconstrained(helper.driver.wait_for_data(&mut helper.pipe.server))
+            .now_or_never();
 
         // Connection should NOT close yet (stream still open)
         assert!(helper.pipe.server.local_error().is_none());
 
         // Client sends fin to close the stream
         assert_eq!(
-            helper
-                .peer
-                .send_body(&mut helper.pipe.client, 0, b"done", true,),
+            helper.peer.send_body(&mut helper.pipe.client, 0, b"done", true,),
             Ok(4)
         );
         // One IO worker iteration: deliver client fin, process it,
         // and close the connection.
         helper.pipe.advance().unwrap();
-        helper
-            .driver
-            .process_reads(&mut helper.pipe.server)
-            .unwrap();
-        helper
-            .driver
-            .process_writes(&mut helper.pipe.server)
-            .unwrap();
-        tokio::task::unconstrained(
-            helper.driver.wait_for_data(&mut helper.pipe.server),
-        )
-        .now_or_never();
+        helper.driver.process_reads(&mut helper.pipe.server).unwrap();
+        helper.driver.process_writes(&mut helper.pipe.server).unwrap();
+        tokio::task::unconstrained(helper.driver.wait_for_data(&mut helper.pipe.server))
+            .now_or_never();
 
         assert_eq!(helper.driver.stream_map.len(), 0);
 
         // Now the connection should close with NoError
-        let local_error = helper
-            .pipe
-            .server
-            .local_error()
-            .expect("connection should be closing");
+        let local_error = helper.pipe.server.local_error().expect("connection should be closing");
         assert!(local_error.is_app, "should be application-level close");
         assert_eq!(
             local_error.error_code,
@@ -2072,16 +1947,14 @@ mod server_side_driver {
         let mut config = default_quiche_config();
         config.enable_dgram(true, 100, 100);
 
-        let mut helper =
-            DriverTestHelper::<ServerHooks>::with_pipe_and_http3_settings(
-                quiche::test_utils::Pipe::with_config_and_buf(&mut config)
-                    .unwrap(),
-                Http3Settings {
-                    enable_extended_connect: true,
-                    ..Default::default()
-                },
-            )
-            .unwrap();
+        let mut helper = DriverTestHelper::<ServerHooks>::with_pipe_and_http3_settings(
+            quiche::test_utils::Pipe::with_config_and_buf(&mut config).unwrap(),
+            Http3Settings {
+                enable_extended_connect: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
         helper.complete_handshake().unwrap();
         helper.advance_and_run_loop().unwrap();
 
@@ -2114,10 +1987,8 @@ mod server_side_driver {
         // Drop the controller. closed() fires, sets the flag, but
         // flow_map is non-empty so no close yet.
         drop(helper.controller);
-        tokio::task::unconstrained(
-            helper.driver.wait_for_data(&mut helper.pipe.server),
-        )
-        .now_or_never();
+        tokio::task::unconstrained(helper.driver.wait_for_data(&mut helper.pipe.server))
+            .now_or_never();
         assert!(helper.pipe.server.local_error().is_none());
 
         // Send FlowShutdown via the per-flow channel.
@@ -2131,10 +2002,8 @@ mod server_side_driver {
         // wait_for_data picks up the frame and calls dgram_ready.
         // shutdown_stream returns early (no stream), so the close
         // gate in cleanup_stream is never invoked.
-        tokio::task::unconstrained(
-            helper.driver.wait_for_data(&mut helper.pipe.server),
-        )
-        .now_or_never();
+        tokio::task::unconstrained(helper.driver.wait_for_data(&mut helper.pipe.server))
+            .now_or_never();
         drop(flow_sender);
         drop(flow_send);
 
@@ -2142,16 +2011,10 @@ mod server_side_driver {
         assert!(helper.driver.flow_map.is_empty());
 
         // closed() is gated off; no other arm can drive a close.
-        tokio::task::unconstrained(
-            helper.driver.wait_for_data(&mut helper.pipe.server),
-        )
-        .now_or_never();
+        tokio::task::unconstrained(helper.driver.wait_for_data(&mut helper.pipe.server))
+            .now_or_never();
 
-        let local_error = helper
-            .pipe
-            .server
-            .local_error()
-            .expect("connection should be closing");
+        let local_error = helper.pipe.server.local_error().expect("connection should be closing");
         assert!(local_error.is_app, "should be application-level close");
         assert_eq!(
             local_error.error_code,
@@ -2168,13 +2031,11 @@ mod server_side_driver {
         config.enable_dgram(true, 100, 100);
 
         // Default settings have enable_extended_connect: false
-        let mut helper =
-            DriverTestHelper::<ServerHooks>::with_pipe_and_http3_settings(
-                quiche::test_utils::Pipe::with_config_and_buf(&mut config)
-                    .unwrap(),
-                Http3Settings::default(),
-            )
-            .unwrap();
+        let mut helper = DriverTestHelper::<ServerHooks>::with_pipe_and_http3_settings(
+            quiche::test_utils::Pipe::with_config_and_buf(&mut config).unwrap(),
+            Http3Settings::default(),
+        )
+        .unwrap();
         helper.complete_handshake().unwrap();
         helper.advance_and_run_loop().unwrap();
 

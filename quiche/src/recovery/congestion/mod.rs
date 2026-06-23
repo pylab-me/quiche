@@ -27,14 +27,14 @@
 use std::time::Instant;
 
 use self::recovery::Acked;
-use super::bandwidth::Bandwidth;
 use super::RecoveryConfig;
 use super::Sent;
-use crate::recovery::rtt;
-use crate::recovery::rtt::RttStats;
-use crate::recovery::CongestionControlAlgorithm;
+use super::bandwidth::Bandwidth;
 use crate::StartupExit;
 use crate::StartupExitReason;
+use crate::recovery::CongestionControlAlgorithm;
+use crate::recovery::rtt;
+use crate::recovery::rtt::RttStats;
 
 pub struct SsThresh {
     // Current slow start threshold.  Defaults to usize::MAX which
@@ -122,8 +122,8 @@ pub struct Congestion {
 
 impl Congestion {
     pub(crate) fn from_config(recovery_config: &RecoveryConfig) -> Self {
-        let initial_congestion_window = recovery_config.max_send_udp_payload_size *
-            recovery_config.initial_congestion_window_packets;
+        let initial_congestion_window = recovery_config.max_send_udp_payload_size
+            * recovery_config.initial_congestion_window_packets;
 
         let mut cc = Congestion {
             congestion_window: initial_congestion_window,
@@ -144,8 +144,7 @@ impl Congestion {
 
             lost_count: 0,
 
-            initial_congestion_window_packets: recovery_config
-                .initial_congestion_window_packets,
+            initial_congestion_window_packets: recovery_config.initial_congestion_window_packets,
 
             max_datagram_size: recovery_config.max_send_udp_payload_size,
 
@@ -157,8 +156,7 @@ impl Congestion {
 
             prr: prr::PRR::default(),
 
-            enable_cubic_idle_restart_fix: recovery_config
-                .enable_cubic_idle_restart_fix,
+            enable_cubic_idle_restart_fix: recovery_config.enable_cubic_idle_restart_fix,
         };
 
         (cc.cc_ops.on_init)(&mut cc);
@@ -168,8 +166,7 @@ impl Congestion {
 
     pub(crate) fn in_congestion_recovery(&self, sent_time: Instant) -> bool {
         match self.congestion_recovery_start_time {
-            Some(congestion_recovery_start_time) =>
-                sent_time <= congestion_recovery_start_time,
+            Some(congestion_recovery_start_time) => sent_time <= congestion_recovery_start_time,
 
             None => false,
         }
@@ -194,22 +191,23 @@ impl Congestion {
 
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn on_packet_sent(
-        &mut self, bytes_in_flight: usize, sent_bytes: usize, now: Instant,
-        pkt: &mut Sent, bytes_lost: u64, in_flight: bool,
+        &mut self,
+        bytes_in_flight: usize,
+        sent_bytes: usize,
+        now: Instant,
+        pkt: &mut Sent,
+        bytes_lost: u64,
+        in_flight: bool,
     ) {
         if in_flight {
-            self.update_app_limited(
-                (bytes_in_flight + sent_bytes) < self.congestion_window,
-            );
+            self.update_app_limited((bytes_in_flight + sent_bytes) < self.congestion_window);
 
             (self.cc_ops.on_packet_sent)(self, sent_bytes, bytes_in_flight, now);
 
             self.prr.on_packet_sent(sent_bytes);
 
             // HyStart++: Start of the round in a slow start.
-            if self.hystart.enabled() &&
-                self.congestion_window < self.ssthresh.get()
-            {
+            if self.hystart.enabled() && self.congestion_window < self.ssthresh.get() {
                 self.hystart.start_round(pkt.pkt_num);
             }
         }
@@ -217,13 +215,15 @@ impl Congestion {
         pkt.time_sent = now;
 
         // bytes_in_flight is already updated. Use previous value.
-        self.delivery_rate
-            .on_packet_sent(pkt, bytes_in_flight, bytes_lost);
+        self.delivery_rate.on_packet_sent(pkt, bytes_in_flight, bytes_lost);
     }
 
     pub(crate) fn on_packets_acked(
-        &mut self, bytes_in_flight: usize, acked: &mut Vec<Acked>,
-        rtt_stats: &RttStats, now: Instant,
+        &mut self,
+        bytes_in_flight: usize,
+        acked: &mut Vec<Acked>,
+        rtt_stats: &RttStats,
+        now: Instant,
     ) {
         // Update delivery rate sample per acked packet.
         for pkt in acked.iter() {
@@ -234,25 +234,15 @@ impl Congestion {
         self.delivery_rate.generate_rate_sample(*rtt_stats.min_rtt);
 
         // Call congestion control hooks.
-        (self.cc_ops.on_packets_acked)(
-            self,
-            bytes_in_flight,
-            acked,
-            now,
-            rtt_stats,
-        );
+        (self.cc_ops.on_packets_acked)(self, bytes_in_flight, acked, now, rtt_stats);
     }
 }
 
 pub(crate) struct CongestionControlOps {
     pub on_init: fn(r: &mut Congestion),
 
-    pub on_packet_sent: fn(
-        r: &mut Congestion,
-        sent_bytes: usize,
-        bytes_in_flight: usize,
-        now: Instant,
-    ),
+    pub on_packet_sent:
+        fn(r: &mut Congestion, sent_bytes: usize, bytes_in_flight: usize, now: Instant),
 
     pub on_packets_acked: fn(
         r: &mut Congestion,
@@ -277,10 +267,7 @@ pub(crate) struct CongestionControlOps {
     #[cfg(feature = "qlog")]
     pub state_str: fn(r: &Congestion, now: Instant) -> &'static str,
 
-    pub debug_fmt: fn(
-        r: &Congestion,
-        formatter: &mut std::fmt::Formatter,
-    ) -> std::fmt::Result,
+    pub debug_fmt: fn(r: &Congestion, formatter: &mut std::fmt::Formatter) -> std::fmt::Result,
 }
 
 impl From<CongestionControlAlgorithm> for &'static CongestionControlOps {
@@ -310,11 +297,8 @@ mod tests {
 
     #[test]
     fn ssthresh_in_css() {
-        let expected_startup_exit = StartupExit::new(
-            1000,
-            None,
-            StartupExitReason::ConservativeSlowStartRounds,
-        );
+        let expected_startup_exit =
+            StartupExit::new(1000, None, StartupExitReason::ConservativeSlowStartRounds);
         let mut ssthresh: SsThresh = Default::default();
         ssthresh.update(1000, true);
         assert_eq!(ssthresh.get(), 1000);
@@ -332,8 +316,7 @@ mod tests {
 
     #[test]
     fn ssthresh_in_slow_start() {
-        let expected_startup_exit =
-            StartupExit::new(1000, None, StartupExitReason::Loss);
+        let expected_startup_exit = StartupExit::new(1000, None, StartupExitReason::Loss);
         let mut ssthresh: SsThresh = Default::default();
         ssthresh.update(1000, false);
         assert_eq!(ssthresh.get(), 1000);
